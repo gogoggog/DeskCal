@@ -1,9 +1,11 @@
-# 'v'로 시작하는 태그를 올리면 윈도우용 설치 파일을 만들어 Releases에 올립니다.
+# 프로그램 코드가 main에 올라오면 윈도우용 설치 파일을 만들어 Releases에 올립니다.
+# 버전 번호는 package.json의 version을 따릅니다 (예: 0.5.1 → v0.5.1).
 name: Windows 빌드와 배포
 
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths: ['src/**', 'build/**', 'package.json', 'package-lock.json', '.github/workflows/release.yml']
   workflow_dispatch:
 
 permissions:
@@ -18,13 +20,20 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: 버전 읽기
+        id: ver
+        shell: bash
+        run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - run: npm ci
       - run: npx electron-builder --win --x64 --publish never
       - name: Releases에 올리기
         uses: softprops/action-gh-release@v2
         with:
-          name: DeskCal ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
+          name: DeskCal ${{ steps.ver.outputs.tag }}
+          tag_name: ${{ steps.ver.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          overwrite_files: true
           body: |
             ## 받기
             - **DeskCal-Setup.exe** — 설치 프로그램 (추천). 더블클릭하면 설치되고 바탕화면에 바로가기가 생깁니다.

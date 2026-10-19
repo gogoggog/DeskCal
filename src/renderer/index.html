@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+  <title>DeskCal</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body data-theme="light">
+  <div class="frame">
+    <!-- 머리줄 -->
+    <header class="toolbar">
+      <h1 class="title no-drag" id="titleBtn" title="오늘로 이동 (T)">
+        <span class="t-month" id="tMonth">10월</span>
+        <span class="t-year" id="tYear">2026</span>
+      </h1>
+      <div class="today-sub" id="todaySub"></div>
+      <div class="spacer"></div>
+      <div class="tools no-drag">
+        <button class="tb" id="syncBtn" title="새로고침" aria-label="새로고침">
+          <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3.5V8h4.5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20.5V16h-4.5"/></svg>
+        </button>
+        <button class="tb" id="addBtn" title="새로운 이벤트 (N)" aria-label="새로운 이벤트">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <div class="nav">
+          <button class="nb" id="prevBtn" title="이전 달 (←)" aria-label="이전 달">
+            <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+          </button>
+          <button class="nb text" id="todayBtn" title="오늘 (T)">오늘</button>
+          <button class="nb" id="nextBtn" title="다음 달 (→)" aria-label="다음 달">
+            <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+        <button class="tb" id="menuBtn" title="설정" aria-label="설정">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="weekdays" id="weekdays"></div>
+    <div class="grid" id="grid" role="grid" aria-label="월간 달력"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <!-- 위치·크기 조정 모드 (평소에는 잠겨 있음) -->
+  <div class="arrange hidden" id="arrange">
+    <div class="arrange-box no-drag">
+      <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>
+      <strong>위치·크기 조정</strong>
+      <p>빈 곳을 잡고 끌면 창이 옮겨집니다.<br>오른쪽 아래 모서리를 끌면 크기가 바뀝니다.</p>
+      <div class="segmented" id="sizeSeg">
+        <button data-size="560,460">작게</button><button data-size="760,620">보통</button><button data-size="980,780">크게</button><button data-size="1200,960">최대</button>
+      </div>
+      <button class="btn primary arrange-done" id="arrangeDone">완료 (잠그기)</button>
+    </div>
+    <div class="grip no-drag" id="grip" title="끌어서 크기 조절"></div>
+  </div>
+
+  <!-- 일정 자세히 보기 -->
+  <div class="pop hidden" id="evPop" role="dialog">
+    <div class="pop-head">
+      <span class="pop-dot" id="popDot"></span>
+      <div class="pop-title" id="popTitle"></div>
+    </div>
+    <div class="pop-line" id="popWhen"></div>
+    <div class="pop-line" id="popWhere"></div>
+    <div class="pop-notes" id="popNotes"></div>
+    <div class="pop-line sub" id="popCal"></div>
+    <div class="pop-foot" id="popFoot">
+      <span class="sub small" id="popNote"></span>
+      <span class="pop-btns">
+        <button class="btn" id="popEdit">편집</button>
+        <button class="btn danger-text" id="popDel">삭제</button>
+      </span>
+    </div>
+  </div>
+
+  <!-- 설정 -->
+  <div class="overlay hidden" id="settings">
+    <aside class="sheet" role="dialog" aria-label="설정">
+      <div class="sheet-head">
+        <span></span>
+        <strong>설정</strong>
+        <button class="link-btn strong" id="closeSettings">완료</button>
+      </div>
+
+      <div class="group-title" id="icloudHead">아이클라우드</div>
+      <div id="icloudBox"></div>
+
+      <div class="group-title">보기 전용 캘린더 (링크)</div>
+      <div class="group" id="calGroup">
+        <ul class="cal-list" id="calList"></ul>
+        <details class="add-box" id="addBox">
+          <summary>링크로 캘린더 추가…</summary>
+          <div class="add-fields">
+            <input id="newName" placeholder="이름 (예: 가족 캘린더)" maxlength="40" />
+            <input id="newUrl" placeholder="주소 (https:// 또는 webcal://)" />
+            <div class="row"><span>색상</span><input type="color" id="newColor" value="#0a84ff" /></div>
+            <button class="btn primary wide" id="addCal">추가</button>
+          </div>
+        </details>
+      </div>
+
+      <div class="group-title">보기</div>
+      <div class="group">
+        <div class="row"><span>모양</span>
+          <div class="segmented" id="themeSeg">
+            <button data-v="auto">자동</button><button data-v="light">라이트</button><button data-v="dark">다크</button>
+          </div>
+        </div>
+        <div class="row"><span>한 주의 시작</span>
+          <div class="segmented" id="weekSeg">
+            <button data-v="0">일요일</button><button data-v="1">월요일</button>
+          </div>
+        </div>
+        <label class="row"><span>24절기 표시</span><input type="checkbox" class="switch" id="showTerms" /></label>
+        <label class="row"><span>음력 날짜 표시</span><input type="checkbox" class="switch" id="showLunar" /></label>
+        <label class="row" id="blurRow"><span>배경 흐림 효과<small id="blurHint"></small></span><input type="checkbox" class="switch" id="blur" /></label>
+        <div class="row"><span>창 투명도</span><input type="range" id="opacity" min="0.5" max="1" step="0.02" /></div>
+      </div>
+
+      <div class="group">
+        <button class="row action" id="arrangeBtn" style="color:var(--blue)">위치·크기 조정… <span class="sub">평소에는 잠겨 있어요</span></button>
+      </div>
+
+      <div class="group-title">동작</div>
+      <div class="group">
+        <label class="row"><span>항상 다른 창 위에 표시</span><input type="checkbox" class="switch" id="alwaysOnTop" /></label>
+        <label class="row"><span>윈도우 시작 시 자동 실행<small id="autoStartHint"></small></span><input type="checkbox" class="switch" id="autoStart" /></label>
+      </div>
+
+      <div class="group-title">단축키</div>
+      <div class="group keys">
+        <div class="row"><span>날짜 더블클릭</span><span class="sub">새로운 이벤트</span></div>
+        <div class="row"><span>일정을 다른 날짜로 끌기</span><span class="sub">날짜 옮기기</span></div>
+        <div class="row"><span><kbd>←</kbd> <kbd>→</kbd> / 마우스 휠</span><span class="sub">이전·다음 달</span></div>
+        <div class="row"><span><kbd>T</kbd></span><span class="sub">오늘</span></div>
+        <div class="row"><span><kbd>N</kbd></span><span class="sub">새로운 이벤트</span></div>
+      </div>
+
+      <div class="group">
+        <button class="row action" id="hideBtn">달력 숨기기 <span class="sub">트레이 아이콘으로 다시 열기</span></button>
+        <button class="row action danger-text" id="quitBtn">프로그램 종료</button>
+      </div>
+      <p class="foot-note">DeskCal</p>
+    </aside>
+  </div>
+
+  <!-- 일정 추가·편집 -->
+  <div class="overlay center hidden" id="composer">
+    <form class="composer" id="composerForm" autocomplete="off">
+      <div class="sheet-head">
+        <button type="button" class="link-btn" id="compClose">취소</button>
+        <strong id="compHeading">새로운 이벤트</strong>
+        <button type="submit" class="link-btn strong" id="compSave">추가</button>
+      </div>
+
+      <div class="group">
+        <input class="field big" id="compTitle" placeholder="제목" maxlength="200" />
+        <input class="field" id="compLocation" placeholder="위치" maxlength="200" />
+      </div>
+
+      <div class="group">
+        <label class="row"><span>하루 종일</span><input type="checkbox" class="switch" id="compAllDay" /></label>
+        <div class="row" id="rowStart"><span>시작</span>
+          <span class="dt"><input type="date" id="compStartDate" /><input type="time" id="compStartTime" step="300" /></span>
+        </div>
+        <div class="row" id="rowEnd"><span>종료</span>
+          <span class="dt"><input type="date" id="compEndDate" /><input type="time" id="compEndTime" step="300" /></span>
+        </div>
+        <div class="row quick" id="quickDur"><span></span>
+          <span class="chips">
+            <button type="button" data-min="30">30분</button><button type="button" data-min="60">1시간</button><button type="button" data-min="90">1시간 30분</button><button type="button" data-min="120">2시간</button>
+          </span>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="row"><span>캘린더</span><span class="cal-pick" id="compCals"></span></div>
+        <div class="row"><span>색상</span><span class="swatches" id="compColors"></span></div>
+        <div class="row"><span>알림</span>
+          <select id="compAlarm">
+            <option value="keep">변경 안 함</option>
+            <option value="">없음</option>
+            <option value="0">이벤트 당시</option>
+            <option value="5">5분 전</option>
+            <option value="10">10분 전</option>
+            <option value="30">30분 전</option>
+            <option value="60">1시간 전</option>
+            <option value="1440">1일 전</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="group">
+        <textarea class="field notes" id="compNotes" placeholder="메모" rows="3" maxlength="2000"></textarea>
+      </div>
+
+      <p class="comp-err" id="compErr"></p>
+      <div class="group hidden" id="compDelGroup">
+        <button type="button" class="row action danger-text center" id="compDelete">이벤트 삭제</button>
+      </div>
+      <p class="foot-note" id="compHint">Enter 저장 · Esc 닫기</p>
+    </form>
+  </div>
+
+  <script src="solarterms.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

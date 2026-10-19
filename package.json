@@ -1,0 +1,60 @@
+{
+  "name": "deskcal",
+  "productName": "DeskCal",
+  "version": "0.5.1",
+  "description": "윈도우 바탕화면 달력 (아이클라우드 캘린더 연동)",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --x64 --publish never"
+  },
+  "dependencies": {
+    "node-ical": "0.27.3",
+    "tsdav": "^2.5.0"
+  },
+  "devDependencies": {
+    "electron": "44.9.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.deskcal.app",
+    "productName": "DeskCal",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "DeskCal-Windows.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "shortcutName": "DeskCal",
+      "artifactName": "DeskCal-Setup.${ext}",
+      "installerIcon": "build/icon.ico",
+      "uninstallDisplayName": "DeskCal 달력"
+    },
+    "electronLanguages": [
+      "ko",
+      "en-US"
+    ],
+    "publish": null
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gogoggog/deskcal.git"
+  }
+}

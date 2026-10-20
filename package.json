@@ -1,7 +1,7 @@
 {
   "name": "deskcal",
   "productName": "DeskCal",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "윈도우 바탕화면 달력 (아이클라우드·구글 캘린더 연동)",
   "main": "src/main.js",
   "private": true,
@@ -10,6 +10,7 @@
     "dist": "electron-builder --win --x64 --publish never"
   },
   "dependencies": {
+    "electron-updater": "6.8.10",
     "node-ical": "0.27.3",
     "tsdav": "^2.5.0"
   },
@@ -51,7 +52,11 @@
       "ko",
       "en-US"
     ],
-    "publish": null
+    "publish": {
+      "provider": "github",
+      "owner": "gogoggog",
+      "repo": "deskcal"
+    }
   },
   "repository": {
     "type": "git",

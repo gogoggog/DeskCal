@@ -1089,8 +1089,52 @@
     api.arrange(false);
   }
 
+  // ---------- 업데이트 ----------
+  let upd = { status: 'idle' };
+  let updDismissed = '';
+  function renderUpdate() {
+    const bar = $('updateBar');
+    const ver = upd.version ? ` ${upd.version}` : '';
+    let text = '';
+    let btn = '';
+    if (upd.status === 'ready') { text = `새 버전${ver} 준비 완료 · 다시 시작하면 적용돼요`; btn = '지금 다시 시작'; }
+    else if (upd.status === 'available') { text = `새 버전${ver}이 나왔어요`; btn = '받으러 가기'; }
+    else if (upd.status === 'downloading' && upd.manual) { text = `새 버전${ver}을 받는 중이에요… ${upd.percent || 0}%`; }
+    const show = !!text && updDismissed !== `${upd.status}:${upd.version}`;
+    bar.classList.toggle('hidden', !show);
+    $('updateText').textContent = text;
+    $('updateBtn').textContent = btn;
+    $('updateBtn').classList.toggle('hidden', !btn);
+    // 설정 화면
+    $('verText').textContent = upd.current || '';
+    const hint = {
+      checking: '확인 중…',
+      latest: '최신 버전이에요',
+      downloading: `새 버전${ver} 받는 중 ${upd.percent || 0}%`,
+      ready: `새 버전${ver} 준비됨 · 다시 시작하면 적용`,
+      available: `새 버전${ver}이 있어요`,
+      error: upd.message || '확인하지 못했어요',
+    }[upd.status] || (upd.mode === 'auto' ? '자동 업데이트 켜짐' : '');
+    $('updHint').textContent = hint;
+    $('checkUpd').textContent = upd.status === 'ready' ? '지금 다시 시작' : upd.status === 'available' ? '받으러 가기' : '업데이트 확인';
+    $('checkUpd').disabled = upd.status === 'checking' || upd.status === 'downloading';
+  }
+  async function wireUpdate() {
+    try { upd = await api.updateGet(); } catch {}
+    renderUpdate();
+    api.on('update-state', (st) => { upd = st; renderUpdate(); });
+    $('updateBtn').onclick = () => api.updateInstall();
+    $('updateClose').onclick = () => { updDismissed = `${upd.status}:${upd.version}`; renderUpdate(); };
+    $('checkUpd').onclick = async () => {
+      if (upd.status === 'ready' || upd.status === 'available') return api.updateInstall();
+      upd = await api.updateCheck();
+      renderUpdate();
+    };
+  }
+
   // ---------- 연결 ----------
   function wire() {
+    wireUpdate();
     $('prevBtn').onclick = () => goMonth(-1);
     $('nextBtn').onclick = () => goMonth(1);
     $('todayBtn').onclick = goToday;

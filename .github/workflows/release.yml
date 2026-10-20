@@ -46,6 +46,9 @@ jobs:
             - **DeskCal-Windows.zip** — 설치 없이 압축만 풀어서 쓰는 버전
 
             처음 실행할 때 파란 'Windows의 PC 보호' 창이 뜨면 '추가 정보' → '실행'을 누르세요.
+            설치 파일로 설치하면 이후 새 버전은 자동으로 업데이트됩니다.
           files: |
             dist/DeskCal-Setup.exe
+            dist/DeskCal-Setup.exe.blockmap
+            dist/latest.yml
             dist/DeskCal-Windows.zip

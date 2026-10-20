@@ -152,6 +152,7 @@ function createTray() {
         { label: '달력 보이기', click: () => { win.show(); win.focus(); } },
         { label: '설정', click: () => { win.show(); win.webContents.send('open-settings'); } },
         { label: '새로고침', click: () => win.webContents.send('refresh') },
+        { label: '업데이트 확인', click: () => { win.show(); checkUpdate(true); } },
         { type: 'separator' },
         {
           label: '항상 위에 표시',
@@ -577,6 +578,96 @@ function makeShortcutsOnce() {
   writeJson(configPath(), config);
 }
 
+// ---------- 자동 업데이트 ----------
+// 설치 파일로 설치한 경우: 새 버전을 알아서 받아 두고, 끌 때(또는 '지금 다시 시작'을 누르면) 적용
+// 압축 파일로 쓰는 경우: 새 버전이 나왔다고 알려 주기만 함
+const HOMEPAGE = 'https://gogoggog.github.io/DeskCal/';
+const LATEST_API = 'https://api.github.com/repos/gogoggog/deskcal/releases/latest';
+let updateState = { status: 'idle', version: '', mode: 'notify', percent: 0, message: '' };
+let autoUpdater = null;
+
+function installedByInstaller() {
+  try {
+    return fs.existsSync(path.join(path.dirname(process.execPath), 'Uninstall DeskCal.exe'));
+  } catch {
+    return false;
+  }
+}
+function sendUpdate(patch) {
+  updateState = { ...updateState, ...patch };
+  if (win && !win.isDestroyed()) win.webContents.send('update-state', { ...updateState, current: app.getVersion() });
+}
+function isNewer(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  }
+  return false;
+}
+
+function setupUpdater() {
+  if (!app.isPackaged) return;
+  if (installedByInstaller()) {
+    try {
+      ({ autoUpdater } = require('electron-updater'));
+    } catch (e) {
+      autoUpdater = null;
+    }
+  }
+  if (autoUpdater) {
+    updateState.mode = 'auto';
+    autoUpdater.autoDownload = true;
+    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.on('update-available', (i) => sendUpdate({ status: 'downloading', version: i.version, percent: 0 }));
+    autoUpdater.on('update-not-available', () => sendUpdate({ status: 'latest' }));
+    autoUpdater.on('download-progress', (p) => sendUpdate({ status: 'downloading', percent: Math.round(p.percent || 0) }));
+    autoUpdater.on('update-downloaded', (i) => sendUpdate({ status: 'ready', version: i.version }));
+    autoUpdater.on('error', (e) => sendUpdate({ status: 'error', message: String((e && e.message) || e) }));
+  }
+  setTimeout(() => checkUpdate(false), 15 * 1000); // 켜고 15초 뒤
+  setInterval(() => checkUpdate(false), 6 * 60 * 60 * 1000); // 이후 6시간마다
+}
+
+async function checkUpdate(manual) {
+  if (!app.isPackaged) {
+    sendUpdate({ status: 'latest' });
+    return updateState;
+  }
+  if (updateState.status === 'ready' || updateState.status === 'downloading') return updateState;
+  sendUpdate({ status: 'checking', manual: !!manual });
+  if (autoUpdater) {
+    try {
+      await autoUpdater.checkForUpdates();
+    } catch (e) {
+      sendUpdate({ status: 'error', message: '업데이트를 확인하지 못했습니다' });
+    }
+    return updateState;
+  }
+  try {
+    const res = await fetch(LATEST_API, { headers: { 'User-Agent': 'DeskCal' }, signal: AbortSignal.timeout(15000) });
+    const j = await res.json();
+    const latest = String(j.tag_name || '').replace(/^v/, '');
+    if (latest && isNewer(latest, app.getVersion())) sendUpdate({ status: 'available', version: latest });
+    else sendUpdate({ status: 'latest' });
+  } catch {
+    sendUpdate({ status: 'error', message: '업데이트를 확인하지 못했습니다' });
+  }
+  return updateState;
+}
+
+ipcMain.handle('update:get', () => ({ ...updateState, current: app.getVersion() }));
+ipcMain.handle('update:check', async () => ({ ...(await checkUpdate(true)), current: app.getVersion() }));
+ipcMain.handle('update:install', () => {
+  if (autoUpdater && updateState.status === 'ready') {
+    saveBounds();
+    setImmediate(() => autoUpdater.quitAndInstall(true, true)); // 조용히 설치하고 다시 켜기
+    return true;
+  }
+  shell.openExternal(HOMEPAGE);
+  return false;
+});
+
 // ---------- 시작 ----------
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -591,6 +682,7 @@ if (!app.requestSingleInstanceLock()) {
     useAcrylic = acrylicSupported() && config.blur !== false;
     createWindow();
     rebuildTrayMenu = createTray();
+    setupUpdater();
     screen.on('display-removed', () => {
       if (win && !boundsAreVisible(win.getBounds())) win.center();
     });

@@ -38,6 +38,12 @@
       </div>
     </header>
 
+    <div class="update-bar hidden" id="updateBar" role="status">
+      <span class="upd-dot" aria-hidden="true"></span>
+      <span class="upd-text" id="updateText"></span>
+      <button class="btn primary small-btn" id="updateBtn"></button>
+      <button class="tb small-tb" id="updateClose" title="닫기" aria-label="닫기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
     <div class="weekdays" id="weekdays"></div>
     <div class="grid" id="grid" role="grid" aria-label="월간 달력"></div>
     <div class="status" id="status"></div>
@@ -132,6 +138,7 @@
       <div class="group">
         <label class="row"><span>항상 다른 창 위에 표시</span><input type="checkbox" class="switch" id="alwaysOnTop" /></label>
         <label class="row"><span>윈도우 시작 시 자동 실행<small id="autoStartHint"></small></span><input type="checkbox" class="switch" id="autoStart" /></label>
+        <div class="row"><span>버전 <b id="verText"></b><small id="updHint"></small></span><button class="btn" id="checkUpd">업데이트 확인</button></div>
       </div>
 
       <div class="group-title">단축키</div>

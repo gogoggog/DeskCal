@@ -17,13 +17,16 @@ contextBridge.exposeInMainWorld('deskcal', {
   updateEvent: (objUrl, uid, event) => ipcRenderer.invoke('event:update', { objUrl, uid, event }),
   relaunch: () => ipcRenderer.invoke('app:relaunch'),
   deleteEvent: (objUrl, etag) => ipcRenderer.invoke('event:delete', { objUrl, etag }),
+  updateGet: () => ipcRenderer.invoke('update:get'),
+  updateCheck: () => ipcRenderer.invoke('update:check'),
+  updateInstall: () => ipcRenderer.invoke('update:install'),
   arrange: (on) => ipcRenderer.invoke('win:arrange', on),
   getSize: () => ipcRenderer.invoke('win:get-size'),
   resizeTo: (width, height) => ipcRenderer.send('win:resize', { width, height }),
   hide: () => ipcRenderer.invoke('app:hide'),
   quit: () => ipcRenderer.invoke('app:quit'),
   on: (channel, fn) => {
-    if (['open-settings', 'refresh', 'config-changed', 'start-arrange'].includes(channel)) {
+    if (['open-settings', 'refresh', 'config-changed', 'start-arrange', 'update-state'].includes(channel)) {
       ipcRenderer.on(channel, (_e, data) => fn(data));
     }
   },

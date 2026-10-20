@@ -359,3 +359,16 @@ select option { background: var(--card); color: var(--text); }
 }
 .composer .row > span:first-child, .sheet .row > span:first-child { flex: none; white-space: nowrap; }
 .sheet .row > label > span:first-child { min-width: 0; }
+
+/* 업데이트 알림 줄 */
+.update-bar {
+  display: flex; align-items: center; gap: 10px; margin: 0 14px 8px; padding: 6px 6px 6px 12px;
+  border-radius: 10px; background: color-mix(in srgb, var(--blue) 12%, transparent); font-size: 12.5px;
+}
+.update-bar .upd-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); flex: none; }
+.update-bar .upd-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.update-bar .small-btn { padding: 4px 12px; }
+.update-bar .small-tb { width: 26px; height: 24px; }
+.update-bar .small-tb svg { width: 14px; height: 14px; }
+.btn { white-space: nowrap; }
+.keys .row > span:first-child { flex-direction: row; align-items: center; gap: 4px; }

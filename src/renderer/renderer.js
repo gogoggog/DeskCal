@@ -387,28 +387,82 @@
   }
 
   // ---------- 불러오기 ----------
-  async function load(force = false) {
+  // 달마다 받아 온 일정을 기억해 두었다가, 다시 볼 때 바로 보여 주기
+  const monthCache = new Map(); // '시작일|끝일' → { events, errors, updatedAt }
+  function rangeOf(v) {
+    const saved = view;
+    view = v;
     const days = gridDays();
+    view = saved;
+    return [keyOf(days[0]), keyOf(days[days.length - 1])];
+  }
+  const sameEvents = (a, b) => a.length === b.length && JSON.stringify(a) === JSON.stringify(b);
+
+  function show(res) {
+    events = res.events;
+    lastErrors = res.errors;
+    lastUpdated = res.updatedAt;
+    indexEvents();
+  }
+
+  async function load(force = false) {
+    const [from, to] = rangeOf(view);
+    const key = `${from}|${to}`;
     const token = ++loadToken;
+    if (force) monthCache.clear();
+
+    // 1) 기억해 둔 게 있으면 먼저 바로 보여 주기
+    const cached = monthCache.get(key);
+    if (cached && !force) {
+      show(cached);
+      renderAll();
+    }
+
+    // 2) 최신 내용을 받아서, 바뀐 게 있을 때만 다시 그리기
     loading = true;
     renderStatus();
+    let res;
     try {
-      const res = await api.getEvents(keyOf(days[0]), keyOf(days[days.length - 1]), force);
-      if (token !== loadToken) return;
-      events = res.events;
-      lastErrors = res.errors;
-      lastUpdated = res.updatedAt;
+      res = await api.getEvents(from, to, force);
     } catch (e) {
-      if (token !== loadToken) return;
-      lastErrors = [{ name: '전체', message: errText(e) }];
+      res = { events: cached ? cached.events : [], errors: [{ name: '전체', message: errText(e) }], updatedAt: lastUpdated };
     }
+    if (token !== loadToken) return;
     loading = false;
-    indexEvents();
-    renderAll();
+    if (!res.errors.length) monthCache.set(key, res);
+    const changed = !cached || force || !sameEvents(cached.events, res.events);
+    show(res);
+    if (changed) renderAll();
+    else renderStatus();
+    prefetchAround();
+  }
+
+  // 앞뒤 달을 미리 받아 두기 (조용히)
+  let prefetchTimer = null;
+  function prefetchAround() {
+    clearTimeout(prefetchTimer);
+    prefetchTimer = setTimeout(async () => {
+      for (const delta of [1, -1]) {
+        const v = new Date(view.getFullYear(), view.getMonth() + delta, 1);
+        const [from, to] = rangeOf(v);
+        const key = `${from}|${to}`;
+        if (monthCache.has(key)) continue;
+        try {
+          const res = await api.getEvents(from, to, false);
+          if (!res.errors.length) monthCache.set(key, res);
+        } catch {}
+      }
+      // 너무 많이 쌓이지 않게 최근 12개월만 기억
+      while (monthCache.size > 12) monthCache.delete(monthCache.keys().next().value);
+    }, 400);
   }
 
   function goMonth(delta) {
     view = new Date(view.getFullYear(), view.getMonth() + delta, 1);
+    const [from, to] = rangeOf(view);
+    const cached = monthCache.get(`${from}|${to}`);
+    if (cached) show(cached);
+    else { events = []; indexEvents(); }
     renderAll();
     load();
   }

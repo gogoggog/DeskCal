@@ -1155,8 +1155,9 @@
         renderAll();
       }
     }, 60 * 1000);
-    setInterval(() => load(true), 10 * 60 * 1000);
-    window.addEventListener('focus', () => { if (Date.now() - lastUpdated > 2 * 60 * 1000) load(true); });
+    // 2분마다 새로 가져오기 (아이클라우드·구글은 매번, 링크 캘린더는 5분 이상 지났을 때만)
+    setInterval(() => load(), 2 * 60 * 1000);
+    window.addEventListener('focus', () => { if (Date.now() - lastUpdated > 60 * 1000) load(); });
   }
 
   async function start() {

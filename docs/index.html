@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DeskCal 다운로드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* 레이아웃: 왼쪽 글 + 오른쪽 달력 화면 히어로, 아래로 설치 순서와 안내가 이어지는 한 단 문서 */
+:root {
+  --bg: #f6f6f3;
+  --surface: #ffffff;
+  --ink: #1b1c1f;
+  --muted: #6c6e74;
+  --line: rgba(27, 28, 31, 0.1);
+  --red: #e5372b;
+  --blue: #0b74e5;
+  --blue-soft: rgba(11, 116, 229, 0.1);
+  --shadow: 0 24px 60px rgba(27, 28, 31, 0.14), 0 0 0 0.5px rgba(27, 28, 31, 0.12);
+  --font: "IBM Plex Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141517; --surface: #1d1e21; --ink: #f2f2f0; --muted: #9a9ca2; --line: rgba(255, 255, 255, 0.1);
+    --red: #ff5a4e; --blue: #4ea1ff; --blue-soft: rgba(78, 161, 255, 0.14);
+    --shadow: 0 24px 60px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.12);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141517; --surface: #1d1e21; --ink: #f2f2f0; --muted: #9a9ca2; --line: rgba(255, 255, 255, 0.1);
+  --red: #ff5a4e; --blue: #4ea1ff; --blue-soft: rgba(78, 161, 255, 0.14);
+  --shadow: 0 24px 60px rgba(0, 0, 0, 0.5), 0 0 0 0.5px rgba(255, 255, 255, 0.12);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 16px; line-height: 1.65;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  -webkit-font-smoothing: antialiased; word-break: keep-all;
+}
+.wrap { max-width: 1060px; margin: 0 auto; padding-block: 56px 72px; display: flex; flex-direction: column; gap: 88px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+p { margin: 0; }
+a { color: var(--blue); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* 히어로 */
+.hero { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 48px; align-items: center; }
+.brand { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+.tile {
+  width: 56px; height: 60px; border-radius: 13px; background: var(--surface); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; align-items: center; overflow: hidden; flex: none;
+}
+.tile .dow { width: 100%; text-align: center; background: var(--red); color: #fff; font-size: 11px; font-weight: 600; line-height: 18px; letter-spacing: 0.06em; }
+.tile .day { font-size: 28px; font-weight: 600; line-height: 40px; font-variant-numeric: tabular-nums; }
+.brand-name { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.brand-sub { font-size: 13px; color: var(--muted); }
+.hero h1 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.22; letter-spacing: -0.03em; font-weight: 700; }
+.hero h1 em { font-style: normal; color: var(--red); }
+.lead { margin-top: 16px; color: var(--muted); font-size: 17px; max-width: 30em; }
+
+.get { margin-top: 30px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.btn {
+  appearance: none; border: 0; cursor: pointer; font: inherit; font-weight: 600; font-size: 16px;
+  background: var(--blue); color: #fff; padding: 13px 26px; border-radius: 12px; display: inline-flex; align-items: center; gap: 10px;
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.btn:hover { filter: brightness(1.06); }
+.btn:active { transform: scale(0.98); }
+.btn { text-decoration: none; }
+.btn[aria-disabled="true"] { pointer-events: none; filter: saturate(0.3); opacity: 0.6; }
+.btn:focus-visible { outline: 3px solid var(--blue-soft); outline-offset: 3px; }
+.btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.meta { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.progress { width: min(340px, 100%); display: flex; flex-direction: column; gap: 6px; }
+.bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--blue); border-radius: 3px; transition: width 0.2s ease; }
+.msg { font-size: 13px; color: var(--muted); }
+.msg.err { color: var(--red); }
+
+.shots { position: relative; }
+.shot { display: block; width: 100%; height: auto; border-radius: 14px; box-shadow: var(--shadow); }
+.shot.dark { display: none; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .shot.dark { display: block; } :root:not([data-theme="light"]) .shot.light { display: none; } }
+:root[data-theme="dark"] .shot.dark { display: block; }
+:root[data-theme="dark"] .shot.light { display: none; }
+.caption { margin-top: 10px; font-size: 12px; color: var(--muted); text-align: right; }
+
+/* 본문 구역 */
+.section { display: grid; grid-template-columns: minmax(0, 0.42fr) minmax(0, 1fr); gap: 40px; border-top: 1px solid var(--line); padding-top: 32px; }
+.section h2 { font-size: 22px; letter-spacing: -0.02em; line-height: 1.35; }
+.section .kicker { font-size: 12px; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
+.section .side { color: var(--muted); font-size: 14px; margin-top: 10px; }
+
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 22px; counter-reset: s; }
+.steps li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; counter-increment: s; }
+.steps li::before {
+  content: counter(s); width: 30px; height: 30px; border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 1px var(--line);
+  display: grid; place-items: center; font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.steps h3 { font-size: 17px; font-weight: 600; line-height: 30px; }
+.steps p { color: var(--muted); font-size: 15px; max-width: 36em; }
+kbd, .ui {
+  font-family: var(--font); font-size: 0.9em; font-weight: 500; color: var(--ink); background: var(--surface);
+  border-radius: 6px; padding: 1px 7px; box-shadow: 0 0 0 1px var(--line); white-space: nowrap;
+}
+
+.features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 32px; }
+.feat h3 { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.feat h3 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
+.feat p { color: var(--muted); font-size: 14.5px; margin-top: 4px; }
+
+.notes { display: flex; flex-direction: column; gap: 16px; }
+.note { display: grid; grid-template-columns: minmax(0, 11em) minmax(0, 1fr); gap: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.note:last-child { border-bottom: 0; padding-bottom: 0; }
+.note strong { font-weight: 600; font-size: 15px; }
+.note p { color: var(--muted); font-size: 14.5px; }
+
+footer { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 18px; border-top: 1px solid var(--line); padding-top: 20px; }
+
+@media (max-width: 820px) {
+  .wrap { gap: 64px; padding-block: 32px 56px; }
+  .hero { grid-template-columns: minmax(0, 1fr); gap: 36px; }
+  .section { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .features { grid-template-columns: minmax(0, 1fr); }
+  .note { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div>
+      <div class="brand">
+        <div class="tile" aria-hidden="true"><span class="dow" id="tileDow">월</span><span class="day" id="tileDay">19</span></div>
+        <div>
+          <div class="brand-name">DeskCal</div>
+          <div class="brand-sub">윈도우 바탕화면 달력</div>
+        </div>
+      </div>
+      <h1>아이폰 일정을<br><em>바탕화면</em>에 띄워 두세요</h1>
+      <p class="lead">아이클라우드 캘린더와 연결해 PC에서 일정을 보고, 더블클릭으로 바로 추가합니다. 추가한 일정은 아이폰에도 그대로 들어갑니다.</p>
+
+      <div class="get">
+        <a class="btn" id="dlBtn" href="#" target="_blank" rel="noopener" aria-disabled="true">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+          <span id="dlLabel">윈도우용 다운로드</span>
+        </a>
+        <p class="msg" id="msg">다운로드 링크를 준비하고 있습니다.</p>
+        <p class="msg" id="altLink" hidden>설치 없이 쓰려면 <a href="https://github.com/gogoggog/deskcal/releases/latest/download/DeskCal-Windows.zip" target="_blank" rel="noopener">압축 파일 버전</a>을 받으세요.</p>
+        <div class="meta"><span>버전 <span class="mono">0.5.1</span></span><span>Windows 10 · 11 (64비트)</span><span>설치 프로그램 (exe)</span></div>
+      </div>
+    </div>
+    <figure class="shots" style="margin:0">
+      <img class="shot light" src="shot-light.png" alt="DeskCal 월간 달력 화면 (라이트 모드)" width="920" height="673">
+      <img class="shot dark" src="shot-dark.png" alt="DeskCal 월간 달력 화면 (다크 모드, 음력 표시)" width="920" height="673">
+      <figcaption class="caption">예시 일정이 들어간 화면입니다</figcaption>
+    </figure>
+  </header>
+
+  <section class="section" aria-labelledby="install-h">
+    <div>
+      <div class="kicker">설치</div>
+      <h2 id="install-h">세 단계면 끝납니다</h2>
+      <p class="side">설치 파일을 실행하면 알아서 설치되고 달력이 켜집니다.</p>
+    </div>
+    <ol class="steps">
+      <li><div><h3>설치 파일 받기</h3><p>위의 <span class="ui">윈도우용 다운로드</span>를 누르면 <span class="ui">DeskCal-Setup.exe</span>가 다운로드 폴더에 저장됩니다.</p></div></li>
+      <li><div><h3>설치 파일 실행</h3><p><span class="ui">DeskCal-Setup.exe</span>를 더블클릭합니다. 파란 <span class="ui">Windows의 PC 보호</span> 창이 뜨면 <span class="ui">추가 정보</span> → <span class="ui">실행</span>을 누르세요. 설치가 끝나면 달력이 켜지고 바탕화면에 바로가기가 생깁니다.</p></div></li>
+      <li><div><h3>캘린더 연결</h3><p>달력 오른쪽 위 톱니바퀴를 눌러 아이클라우드 계정을 연결합니다. 연결하는 방법은 바로 아래에 있습니다.</p></div></li>
+    </ol>
+  </section>
+
+  <section class="section" aria-labelledby="icloud-h">
+    <div>
+      <div class="kicker">아이폰 캘린더 연결</div>
+      <h2 id="icloud-h">애플 ID와 앱 암호로 연결합니다</h2>
+      <p class="side">애플은 다른 프로그램이 캘린더를 쓸 때 진짜 비밀번호 대신 '앱 암호'를 쓰게 합니다. 언제든 지우면 바로 끊깁니다.</p>
+    </div>
+    <ol class="steps">
+      <li><div><h3>앱 암호 만들기</h3><p><a href="https://account.apple.com/account/manage" target="_blank" rel="noopener">account.apple.com</a>에 로그인한 뒤 <span class="ui">로그인 및 보안</span> → <span class="ui">앱 암호</span> → <span class="ui">＋</span>를 누르고 이름에 DeskCal을 적습니다.</p></div></li>
+      <li><div><h3>암호 복사</h3><p><span class="mono">xxxx-xxxx-xxxx-xxxx</span> 모양의 암호가 나옵니다. 창을 닫으면 다시 볼 수 없으니 바로 복사하세요.</p></div></li>
+      <li><div><h3>DeskCal에 붙여 넣기</h3><p>톱니바퀴 → <span class="ui">아이클라우드</span>에 애플 ID(이메일)와 앱 암호를 넣고 <span class="ui">연결</span>을 누릅니다. 내 캘린더 목록이 보이면 연결된 것입니다.</p></div></li>
+    </ol>
+  </section>
+
+  <section class="section" aria-labelledby="feat-h">
+    <div>
+      <div class="kicker">기능</div>
+      <h2 id="feat-h">할 수 있는 것</h2>
+    </div>
+    <div class="features">
+      <div class="feat" style="--c:#ff3b30"><h3><span class="dot"></span>공휴일 · 24절기 · 음력</h3><p>대한민국 공휴일이 기본으로 들어 있고, 한로·상강 같은 절기와 음력 날짜도 날짜 칸에 표시합니다.</p></div>
+      <div class="feat" style="--c:#0a84ff"><h3><span class="dot"></span>더블클릭으로 일정 추가</h3><p>날짜를 더블클릭하면 입력 창이 열립니다. 하루 종일, 여러 날짜, 알림, 메모까지 넣을 수 있습니다.</p></div>
+      <div class="feat" style="--c:#34c759"><h3><span class="dot"></span>일정마다 색 고르기</h3><p>빨강부터 갈색까지 여덟 가지 색으로 일정을 나눠 볼 수 있습니다.</p></div>
+      <div class="feat" style="--c:#ff9500"><h3><span class="dot"></span>끌어서 날짜 옮기기</h3><p>일정을 다른 날짜로 끌어다 놓으면 시간은 그대로 두고 날짜만 바뀝니다.</p></div>
+      <div class="feat" style="--c:#af52de"><h3><span class="dot"></span>라이트 · 다크 모드</h3><p>윈도우 설정을 따라가거나 직접 고릅니다. 윈도우 11에서는 뒤가 흐리게 비치는 효과도 씁니다.</p></div>
+      <div class="feat" style="--c:#a2845e"><h3><span class="dot"></span>위치 잠금</h3><p>평소에는 창이 고정되고, 톱니바퀴 → 위치·크기 조정에서만 옮기거나 크기를 바꿉니다.</p></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="note-h">
+    <div>
+      <div class="kicker">알아 둘 점</div>
+      <h2 id="note-h">쓰기 전에 읽어 주세요</h2>
+    </div>
+    <div class="notes">
+      <div class="note"><strong>파란 경고 창</strong><p>개인이 만든 프로그램이라 마이크로소프트 서명이 없어 처음 실행할 때 경고가 뜹니다. <span class="ui">추가 정보</span> → <span class="ui">실행</span>을 누르면 됩니다.</p></div>
+      <div class="note"><strong>내 정보가 저장되는 곳</strong><p>애플 ID와 앱 암호는 내 PC에만 암호화되어 저장되고, 다른 곳으로 보내지지 않습니다. 일정은 아이클라우드에서 바로 읽고 씁니다.</p></div>
+      <div class="note"><strong>일정 색</strong><p>고른 색은 DeskCal에서만 보입니다. 아이폰 캘린더 앱은 캘린더 단위로만 색을 정하기 때문입니다.</p></div>
+      <div class="note"><strong>반복 일정</strong><p>매주 회의처럼 반복되는 일정은 DeskCal에서 볼 수 있지만, 수정과 삭제는 아이폰에서 해 주세요.</p></div>
+      <div class="note"><strong>업무용 PC</strong><p>망이 분리된 PC에서는 아이클라우드에 접속하지 못할 수 있고, 프로그램 설치가 보안 규정에 걸릴 수 있습니다. 집 PC에서 쓰시길 권합니다.</p></div>
+      <div class="note"><strong>새 버전</strong><p>자동 업데이트는 아직 없습니다. 이 페이지의 다운로드 버튼은 늘 최신 버전을 받으니, 다시 받아 설치하면 됩니다. 설정과 연결은 그대로 남습니다.</p></div>
+      <div class="note"><strong>지우기</strong><p>윈도우 <span class="ui">설정</span> → <span class="ui">앱</span> → <span class="ui">설치된 앱</span>에서 <span class="ui">DeskCal 달력</span>을 제거하면 됩니다.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <a href="privacy.html">개인정보 처리방침</a>
+    <a href="https://github.com/gogoggog/deskcal">GitHub</a>
+    <span>DeskCal <span class="mono">0.5.1</span></span>
+    <span>윈도우 10 · 11 (64비트)</span>
+    <span>아이클라우드 캘린더 · 대한민국 공휴일</span>
+  </footer>
+</div>
+
+<script>
+(() => {
+  // 다운로드 링크 (OneDrive 공유 링크)
+  const DOWNLOAD_URL = 'https://github.com/gogoggog/deskcal/releases/latest/download/DeskCal-Setup.exe';
+  const $ = (id) => document.getElementById(id);
+  const now = new Date();
+  $('tileDow').textContent = ['일', '월', '화', '수', '목', '금', '토'][now.getDay()];
+  $('tileDay').textContent = now.getDate();
+  if (DOWNLOAD_URL) {
+    $('dlBtn').href = DOWNLOAD_URL;
+    $('dlBtn').removeAttribute('aria-disabled');
+    $('msg').hidden = true;
+    $('altLink').hidden = false;
+  }
+})();
+</script>
+
+</body>
+</html>

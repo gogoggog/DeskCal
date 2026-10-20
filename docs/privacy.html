@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DeskCal 개인정보 처리방침</title>
+<style>
+:root { --bg:#f6f6f3; --ink:#1b1c1f; --muted:#6c6e74; --line:rgba(27,28,31,.1); --blue:#0b74e5; }
+@media (prefers-color-scheme: dark) { :root { --bg:#141517; --ink:#f2f2f0; --muted:#9a9ca2; --line:rgba(255,255,255,.1); --blue:#4ea1ff; color-scheme: dark; } }
+body { background:var(--bg); color:var(--ink); font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif; line-height:1.75; margin:0; padding:48px max(16px,env(safe-area-inset-left,0px)); word-break:keep-all; }
+main { max-width:720px; margin:0 auto; }
+h1 { font-size:28px; margin:0 0 6px; } h2 { font-size:18px; margin:32px 0 8px; padding-top:20px; border-top:1px solid var(--line); }
+p, li { color:var(--muted); } strong { color:var(--ink); } a { color:var(--blue); }
+</style>
+</head>
+<body>
+<main>
+<h1>DeskCal 개인정보 처리방침</h1>
+<p>시행일: 2026년 10월 20일</p>
+
+<h2>1. 한 줄 요약</h2>
+<p><strong>DeskCal은 사용자의 정보를 개발자에게 보내거나 서버에 모으지 않습니다.</strong> 모든 정보는 사용자의 PC에만 저장되고, 일정은 사용자의 PC와 애플·구글 캘린더 사이에서만 오갑니다.</p>
+
+<h2>2. PC에 저장하는 정보</h2>
+<ul>
+<li>아이클라우드 연결 시: 애플 ID(이메일)와 앱 전용 암호. 암호는 윈도우의 데이터 보호 기능(DPAPI)으로 암호화하여 저장합니다.</li>
+<li>구글 연결 시: 구글 계정 이메일과 로그인 유지용 토큰. 토큰은 같은 방식으로 암호화하여 저장합니다.</li>
+<li>달력 설정(테마, 창 위치, 표시할 캘린더, 일정 색 등)과 마지막으로 불러온 일정 사본(인터넷이 끊겼을 때 보여 주기 위함)</li>
+</ul>
+<p>이 정보는 사용자 PC의 앱 데이터 폴더에만 있으며, 개발자를 포함한 누구에게도 전송되지 않습니다.</p>
+
+<h2>3. 구글 사용자 데이터의 이용</h2>
+<p>구글 계정을 연결하면 DeskCal은 Google Calendar API를 통해 <strong>사용자의 캘린더 목록과 일정을 읽고, 사용자가 직접 요청한 일정의 추가·수정·삭제</strong>만 수행합니다.</p>
+<ul>
+<li>구글 데이터는 달력 화면에 일정을 보여 주고 사용자가 편집하는 용도로만 사용합니다.</li>
+<li>구글 데이터를 개발자나 제3자에게 전송, 판매, 공유하지 않으며 광고에 사용하지 않습니다.</li>
+<li>구글 데이터를 AI·머신러닝 모델 학습에 사용하지 않습니다.</li>
+</ul>
+<p>DeskCal의 Google API 사용은 <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API 서비스 사용자 데이터 정책</a>(제한적 사용 요구사항 포함)을 따릅니다.</p>
+
+<h2>4. 연결 끊기와 삭제</h2>
+<ul>
+<li>DeskCal 설정에서 <strong>연결 해제</strong>를 누르면 PC에 저장된 계정 정보가 지워집니다.</li>
+<li>구글: <a href="https://myaccount.google.com/permissions">구글 계정 → 서드파티 액세스</a>에서 DeskCal의 권한을 언제든 취소할 수 있습니다.</li>
+<li>애플: <a href="https://account.apple.com/account/manage">account.apple.com</a>의 앱 암호에서 DeskCal 암호를 지우면 바로 차단됩니다.</li>
+<li>프로그램을 제거하면 설정과 저장된 정보도 함께 지울 수 있습니다.</li>
+</ul>
+
+<h2>5. 문의</h2>
+<p>DeskCal은 개인이 만든 무료 프로그램입니다. 문의는 <a href="https://github.com/gogoggog/deskcal/issues">GitHub</a>에 남겨 주세요.</p>
+<p><a href="./">← DeskCal 홈으로</a></p>
+</main>
+</body>
+</html>

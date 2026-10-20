@@ -25,6 +25,12 @@ jobs:
         shell: bash
         run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - run: npm ci
+      - name: 구글 등록 값 넣기 (GitHub 비밀 칸에서)
+        shell: bash
+        env:
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          node -e "const fs=require('fs');const f='src/google-client.json';const j=JSON.parse(fs.readFileSync(f,'utf8'));j.client_secret=process.env.GOOGLE_CLIENT_SECRET||'';if(!j.client_secret){console.error('GOOGLE_CLIENT_SECRET 비밀 값이 없습니다');process.exit(1)}fs.writeFileSync(f,JSON.stringify(j,null,2))"
       - run: npx electron-builder --win --x64 --publish never
       - name: Releases에 올리기
         uses: softprops/action-gh-release@v2

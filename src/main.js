@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { downloadIcs, extractEvents, normalizeUrl } = require('./calendar');
 const icloud = require('./icloud');
+const google = require('./google');
 const os = require('os');
 
 // 윈도우 11(22H2 이상)이면 뒤가 흐리게 비치는 효과(아크릴) 사용
@@ -33,6 +34,10 @@ const DEFAULT_CONFIG = {
   bounds: null,
   // 아이클라우드 계정: { appleId, passwordEnc, calendars:[{url,name,color,enabled}], defaultCal }
   icloud: null,
+  // 구글 계정: { email, tokenEnc, calendars:[{id,name,color,writable,primary,enabled}] }
+  google: null,
+  // 새 일정 기본 캘린더 (아이클라우드 주소 또는 'g:구글캘린더ID')
+  defaultCal: '',
 };
 
 const dataDir = () => app.getPath('userData');
@@ -192,11 +197,12 @@ function applySettings(patch) {
 }
 
 function publicConfig() {
-  const { bounds, icloud: ic, eventColors, ...rest } = config;
+  const { bounds, icloud: ic, google: g, eventColors, ...rest } = config;
   const icPublic = ic
     ? { appleId: ic.appleId, calendars: ic.calendars || [], defaultCal: ic.defaultCal || '' }
     : null;
-  return { ...rest, icloud: icPublic, isPackaged: app.isPackaged, blurPref: config.blur !== false, blurAvailable: acrylicSupported(), blurActive: useAcrylic };
+  const gPublic = g ? { email: g.email, calendars: g.calendars || [] } : null;
+  return { ...rest, icloud: icPublic, google: gPublic, defaultCal: currentDefaultCal(), isPackaged: app.isPackaged, blurPref: config.blur !== false, blurAvailable: acrylicSupported(), blurActive: useAcrylic };
 }
 
 // ---------- 아이클라우드 ----------
@@ -276,15 +282,30 @@ function rememberColor(uid, color) {
   writeJson(configPath(), config);
 }
 
+const isGoogle = (s) => typeof s === 'string' && s.startsWith('g:');
+
 ipcMain.handle('event:create', async (_e, { calUrl, event }) => {
-  if (!(await ensureIcloud())) throw new Error('먼저 설정에서 아이클라우드 계정을 연결해 주세요');
-  const { uid } = await icloud.createEvent(calUrl || config.icloud.defaultCal, event);
+  const target = calUrl || currentDefaultCal();
+  if (isGoogle(target)) {
+    if (!ensureGoogle()) throw new Error('먼저 설정에서 구글 계정으로 로그인해 주세요');
+    await google.createEvent(target.slice(2), event); // 구글은 일정 색을 구글 쪽에 저장
+    gCache.clear();
+    return true;
+  }
+  if (!(await ensureIcloud())) throw new Error('먼저 설정에서 캘린더 계정을 연결해 주세요');
+  const { uid } = await icloud.createEvent(target || config.icloud.defaultCal, event);
   rememberColor(uid, event && event.color);
   icCache.clear();
   return true;
 });
 
 ipcMain.handle('event:update', async (_e, { objUrl, uid, event }) => {
+  if (isGoogle(objUrl)) {
+    if (!ensureGoogle()) throw new Error('구글에 로그인되어 있지 않습니다');
+    await google.updateEvent(objUrl, event);
+    gCache.clear();
+    return true;
+  }
   if (!(await ensureIcloud())) throw new Error('아이클라우드에 연결되어 있지 않습니다');
   await icloud.updateEvent(objUrl, event);
   rememberColor(uid, event && event.color);
@@ -293,10 +314,89 @@ ipcMain.handle('event:update', async (_e, { objUrl, uid, event }) => {
 });
 
 ipcMain.handle('event:delete', async (_e, { objUrl, etag }) => {
+  if (isGoogle(objUrl)) {
+    if (!ensureGoogle()) throw new Error('구글에 로그인되어 있지 않습니다');
+    await google.deleteEvent(objUrl);
+    gCache.clear();
+    return true;
+  }
   if (!(await ensureIcloud())) throw new Error('아이클라우드에 연결되어 있지 않습니다');
   await icloud.deleteEvent(objUrl, etag);
   icCache.clear();
   return true;
+});
+
+// ---------- 구글 ----------
+const gCache = new Map();
+function ensureGoogle() {
+  const g = config.google;
+  if (!g || !g.tokenEnc) return false;
+  if (!google.hasSession()) google.setSession(decryptPw(g.tokenEnc));
+  return true;
+}
+
+// 새 일정의 기본 캘린더: 저장된 값이 아직 쓸 수 있는 캘린더인지 확인
+function writableCals() {
+  const list = [];
+  if (config.icloud) for (const c of config.icloud.calendars || []) list.push(c.url);
+  if (config.google) for (const c of config.google.calendars || []) if (c.writable) list.push(`g:${c.id}`);
+  return list;
+}
+function currentDefaultCal() {
+  const list = writableCals();
+  if (config.defaultCal && list.includes(config.defaultCal)) return config.defaultCal;
+  if (config.icloud && list.includes(config.icloud.defaultCal)) return config.icloud.defaultCal;
+  const gp = config.google && (config.google.calendars || []).find((c) => c.primary && c.writable);
+  if (gp) return `g:${gp.id}`;
+  return list[0] || '';
+}
+
+let googleLoginBusy = false;
+ipcMain.handle('google:login', async () => {
+  if (googleLoginBusy) throw new Error('구글 로그인 창이 이미 열려 있습니다. 브라우저를 확인해 주세요');
+  googleLoginBusy = true;
+  try {
+    const r = await google.login((url) => shell.openExternal(url));
+    google.setSession(r.refreshToken, r.accessToken, r.expiresIn);
+    const cals = await google.listCalendars();
+    const prev = new Map(((config.google && config.google.calendars) || []).map((c) => [c.id, c]));
+    config.google = {
+      email: r.email,
+      tokenEnc: encryptPw(r.refreshToken),
+      // 구글의 '대한민국의 휴일' 캘린더는 기본 공휴일과 겹치니 처음엔 숨김
+      calendars: cals.map((c) => ({ ...c, enabled: prev.has(c.id) ? prev.get(c.id).enabled !== false : !c.holiday })),
+    };
+    gCache.clear();
+    if (win) { win.show(); win.focus(); }
+    return applySettings({});
+  } finally {
+    googleLoginBusy = false;
+  }
+});
+
+ipcMain.handle('google:disconnect', async () => {
+  const g = config.google;
+  if (g && g.tokenEnc) {
+    try { await google.revoke(decryptPw(g.tokenEnc)); } catch {}
+  }
+  google.clearSession();
+  config.google = null;
+  gCache.clear();
+  return applySettings({});
+});
+
+ipcMain.handle('google:update', (_e, patch) => {
+  const g = config.google;
+  if (!g) return publicConfig();
+  if (patch && patch.toggle && typeof patch.toggle.id === 'string') {
+    g.calendars = g.calendars.map((c) => (c.id === patch.toggle.id ? { ...c, enabled: !!patch.toggle.enabled } : c));
+  }
+  return applySettings({});
+});
+
+ipcMain.handle('cal:set-default', (_e, key) => {
+  if (typeof key === 'string' && writableCals().includes(key)) config.defaultCal = key;
+  return applySettings({});
 });
 
 const icCache = new Map(); // 같은 달을 자주 다시 불러오지 않도록 잠깐 보관
@@ -388,6 +488,40 @@ ipcMain.handle('events:get', async (_e, { from, to, force }) => {
       }
     } catch (err) {
       errors.push({ name: '아이클라우드', message: String(err.message || err) });
+    }
+  }
+
+  // 구글 계정으로 연결된 캘린더
+  if (config.google) {
+    try {
+      if (ensureGoogle()) {
+        const G_FRESH_MS = 60 * 1000;
+        await Promise.all(
+          config.google.calendars
+            .filter((c) => c.enabled !== false)
+            .map(async (cal) => {
+              const key = `${cal.id}|${from}|${to}`;
+              let hit = gCache.get(key);
+              if (force || !hit || Date.now() - hit.at > G_FRESH_MS) {
+                try {
+                  hit = { at: Date.now(), events: await google.fetchEvents(cal.id, fromDate, toDate, cal.writable) };
+                  gCache.set(key, hit);
+                } catch (err) {
+                  errors.push({ name: `구글 · ${cal.name}`, message: String(err.message || err) });
+                }
+              }
+              if (!hit) return;
+              for (const ev of hit.events) {
+                results.push({
+                  ...ev, calId: `g:${cal.id}`, calUrl: `g:${cal.id}`, calColor: cal.color,
+                  color: ev.ownColor || cal.color, holiday: false,
+                });
+              }
+            })
+        );
+      }
+    } catch (err) {
+      errors.push({ name: '구글', message: String(err.message || err) });
     }
   }
 

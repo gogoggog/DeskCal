@@ -349,3 +349,13 @@ select option { background: var(--card); color: var(--text); }
 .sw.auto.on { box-shadow: 0 0 0 2px var(--card), 0 0 0 3.5px var(--sub); }
 .comp-err { color: var(--red); font-size: 12px; margin: 0 0 10px 4px; }
 .comp-err:empty { display: none; }
+
+/* 구글 로그인 버튼 */
+.g-login { justify-content: center !important; font-weight: 600; gap: 10px !important; }
+.g-logo {
+  width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  font: 700 13px/1 Arial, sans-serif; color: #fff;
+  background: conic-gradient(#ea4335 0 25%, #fbbc05 0 50%, #34a853 0 75%, #4285f4 0);
+}
+.composer .row > span:first-child, .sheet .row > span:first-child { flex: none; white-space: nowrap; }
+.sheet .row > label > span:first-child { min-width: 0; }

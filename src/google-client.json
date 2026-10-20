@@ -1,0 +1,5 @@
+{
+  "_설명": "DeskCal 데스크톱 앱의 구글 로그인 등록 정보입니다. client_secret은 공개 코드에 두지 않고, 설치 파일을 만들 때 GitHub의 비밀 칸(GOOGLE_CLIENT_SECRET)에서 넣습니다.",
+  "client_id": "370874887487-6uhnmm7kfag7e75b230d4isph6819eto.apps.googleusercontent.com",
+  "client_secret": ""
+}

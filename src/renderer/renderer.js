@@ -262,7 +262,7 @@
     const btn = $('syncBtn');
     btn.classList.toggle('busy', loading);
     btn.classList.toggle('err', !loading && lastErrors.length > 0);
-    if (!config.calendars.length && !config.icloud) {
+    if (!config.calendars.length && !config.icloud && !config.google) {
       s.textContent = '⚙ 설정에서 캘린더를 연결하세요';
       s.className = 'status';
     } else if (lastErrors.length) {
@@ -310,13 +310,22 @@
     return `${dayLabel(ev.startDay)} ${fmtTimeKo(ev.start)} ~\n${dayLabel(ev.endDay)} ${fmtTimeKo(ev.end)}`;
   }
 
+  // 일정을 넣을 수 있는 캘린더 전체 (아이클라우드 + 구글)
+  function allCals() {
+    const list = [];
+    if (config.icloud) for (const c of config.icloud.calendars || []) list.push({ key: c.url, name: c.name, color: c.color, source: '아이클라우드', writable: true });
+    if (config.google) for (const c of config.google.calendars || []) list.push({ key: `g:${c.id}`, name: c.name, color: c.color, source: '구글', writable: !!c.writable });
+    return list;
+  }
+  const writableCals = () => allCals().filter((c) => c.writable);
+  const hasAccount = () => !!(config.icloud || config.google);
   function calOf(ev) {
-    if (ev && ev.calUrl && config.icloud) return config.icloud.calendars.find((x) => x.url === ev.calUrl) || null;
-    return null;
+    if (!ev || !ev.calUrl) return null;
+    return allCals().find((x) => x.key === ev.calUrl) || null;
   }
   function calNameOf(ev) {
     const ic = calOf(ev);
-    if (ic) return `${ic.name} · 아이클라우드`;
+    if (ic) return `${ic.name} · ${ic.source}`;
     const c = config.calendars.find((x) => x.id === ev.calId);
     return c ? `${c.name} · 보기 전용` : '';
   }
@@ -493,7 +502,8 @@
   function renderCalPick() {
     const wrap = $('compCals');
     wrap.innerHTML = '';
-    const cals = (config.icloud && config.icloud.calendars) || [];
+    const cals = writableCals();
+    const showSource = !!(config.icloud && config.google);
     if (comp.mode === 'edit') {
       const c = calOf(comp.ev);
       const s = document.createElement('span');
@@ -507,18 +517,19 @@
     for (const cal of cals) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = cal.url === comp.cal ? 'on' : '';
+      b.className = cal.key === comp.cal ? 'on' : '';
       b.style.setProperty('--c', cal.color);
+      b.title = `${cal.name} · ${cal.source}`;
       b.innerHTML = '<span class="dot"></span>';
-      b.appendChild(document.createTextNode(cal.name));
-      b.onclick = () => { comp.cal = cal.url; renderCalPick(); renderSwatches(); };
+      b.appendChild(document.createTextNode(showSource ? `${cal.name} (${cal.source === '구글' ? 'G' : 'iCloud'})` : cal.name));
+      b.onclick = () => { comp.cal = cal.key; renderCalPick(); renderSwatches(); };
       wrap.appendChild(b);
     }
   }
 
   function currentCalColor() {
     if (comp.mode === 'edit') { const c = calOf(comp.ev); return c ? c.color : comp.ev.calColor || comp.ev.color; }
-    const c = ((config.icloud && config.icloud.calendars) || []).find((x) => x.url === comp.cal);
+    const c = allCals().find((x) => x.key === comp.cal);
     return c ? c.color : '#0a84ff';
   }
 
@@ -545,8 +556,8 @@
 
   function openComposer({ day, edit } = {}) {
     hidePopover();
-    if (!config.icloud) {
-      if (confirm('일정을 추가하려면 먼저 아이클라우드 계정을 연결해야 합니다.\n설정을 열까요?')) openSettings(true);
+    if (!hasAccount() || !writableCals().length) {
+      if (confirm('일정을 추가하려면 먼저 아이클라우드나 구글 계정을 연결해야 합니다.\n설정을 열까요?')) openSettings(true);
       return;
     }
     comp.mode = edit ? 'edit' : 'new';
@@ -581,7 +592,8 @@
       }
     } else {
       const key = day || selected;
-      comp.cal = config.icloud.defaultCal || (config.icloud.calendars[0] && config.icloud.calendars[0].url) || '';
+      const wc = writableCals();
+      comp.cal = wc.some((c) => c.key === config.defaultCal) ? config.defaultCal : (wc[0] && wc[0].key) || '';
       comp.color = '';
       let start = '09:00';
       if (key === todayKey) {
@@ -805,7 +817,7 @@
       };
       left.append(cb, document.createTextNode(cal.name));
       row.appendChild(left);
-      if (cal.url === ic.defaultCal) {
+      if (cal.url === config.defaultCal) {
         const def = document.createElement('small');
         def.className = 'sub';
         def.textContent = '기본';
@@ -813,18 +825,117 @@
       }
       g.appendChild(row);
     }
+    box.appendChild(g);
+  }
+
+  // ---------- 구글 설정 ----------
+  function renderGoogle() {
+    const box = $('googleBox');
+    box.innerHTML = '';
+    const gg = config.google;
+    const g = document.createElement('div');
+    g.className = 'group';
+    if (!gg) {
+      g.innerHTML = `
+        <div class="row" style="display:block;padding:12px 14px">
+          <div style="font-weight:600;margin-bottom:4px">구글 캘린더 연결</div>
+          <div class="sub small" style="line-height:1.7">버튼을 누르면 브라우저에서 구글 로그인 창이 열립니다. 로그인하고 <b>허용</b>을 누르면 연결됩니다.<br>
+          처음에 '확인되지 않은 앱' 화면이 나오면 <b>고급 → DeskCal(으)로 이동</b>을 눌러 주세요.</div>
+        </div>
+        <button class="row action g-login" id="gLogin"><span class="g-logo" aria-hidden="true">G</span>구글 계정으로 로그인</button>`;
+      box.appendChild(g);
+      const err = document.createElement('p');
+      err.className = 'comp-err';
+      err.id = 'gErr';
+      err.style.margin = '-6px 14px 10px';
+      box.appendChild(err);
+      $('gLogin').onclick = async () => {
+        const btn = $('gLogin');
+        btn.disabled = true;
+        btn.lastChild.textContent = '브라우저에서 로그인해 주세요…';
+        $('gErr').textContent = '';
+        try {
+          config = await api.googleLogin();
+          applyConfig();
+          await load(true);
+        } catch (e) {
+          if ($('gErr')) $('gErr').textContent = errText(e);
+          btn.disabled = false;
+          btn.lastChild.textContent = '구글 계정으로 로그인';
+        }
+      };
+      return;
+    }
+    const who = document.createElement('div');
+    who.className = 'row';
+    const name = document.createElement('span');
+    const idText = document.createElement('span');
+    idText.style.fontWeight = '600';
+    idText.textContent = gg.email || '구글 계정';
+    const small = document.createElement('small');
+    small.textContent = '연결됨';
+    name.append(idText, small);
+    const out = document.createElement('button');
+    out.className = 'link-btn';
+    out.style.fontSize = '12px';
+    out.textContent = '연결 해제';
+    out.onclick = async () => {
+      if (!confirm('구글 연결을 해제할까요? (구글 캘린더의 일정은 지워지지 않습니다)')) return;
+      config = await api.googleDisconnect();
+      applyConfig();
+      load(true);
+    };
+    who.append(name, out);
+    g.appendChild(who);
+    for (const cal of gg.calendars) {
+      const row = document.createElement('label');
+      row.className = 'row';
+      row.style.setProperty('--c', cal.color);
+      const left = document.createElement('span');
+      left.style.cssText = 'flex-direction:row;align-items:center;gap:10px;min-width:0';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'check-dot';
+      cb.checked = cal.enabled !== false;
+      cb.onchange = async () => {
+        config = await api.googleUpdate({ toggle: { id: cal.id, enabled: cb.checked } });
+        applyConfig();
+        load();
+      };
+      const nm = document.createElement('span');
+      nm.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      nm.textContent = cal.name;
+      left.append(cb, nm);
+      row.appendChild(left);
+      const tag = document.createElement('small');
+      tag.className = 'sub';
+      tag.textContent = `g:${cal.id}` === config.defaultCal ? '기본' : cal.writable ? '' : '보기 전용';
+      row.appendChild(tag);
+      g.appendChild(row);
+    }
+    box.appendChild(g);
+  }
+
+  // 새 이벤트 기본 캘린더 (계정 상관없이 한곳에서)
+  function renderDefaultCal() {
+    const box = $('defaultCalBox');
+    box.innerHTML = '';
+    const cals = writableCals();
+    if (cals.length < 2) return;
+    const g = document.createElement('div');
+    g.className = 'group';
     const sel = document.createElement('div');
     sel.className = 'row';
     sel.innerHTML = '<span>새 이벤트 기본 캘린더</span>';
     const s = document.createElement('select');
-    for (const cal of ic.calendars) {
+    for (const cal of cals) {
       const o = document.createElement('option');
-      o.value = cal.url;
-      o.textContent = cal.name;
+      o.value = cal.key;
+      o.textContent = config.icloud && config.google ? `${cal.name} (${cal.source})` : cal.name;
       s.appendChild(o);
     }
-    s.value = ic.defaultCal;
-    s.onchange = async () => { config = await api.icloudUpdate({ defaultCal: s.value }); applyConfig(); };
+    s.value = config.defaultCal;
+    s.onchange = async () => { config = await api.setDefaultCal(s.value); applyConfig(); };
     sel.appendChild(s);
     g.appendChild(sel);
     box.appendChild(g);
@@ -891,6 +1002,8 @@
     $('blurHint').textContent = config.blurAvailable ? '바꾸면 프로그램이 다시 시작됩니다' : '윈도우 11에서만 지원';
     renderCalList();
     renderIcloud();
+    renderGoogle();
+    renderDefaultCal();
   }
 
   function openSettings(focusIcloud) {

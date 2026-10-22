@@ -465,13 +465,16 @@
     else { events = []; indexEvents(); }
     renderAll();
     load();
+    loadMemo();
   }
   function goToday() {
+    const same = view.getFullYear() === new Date().getFullYear() && view.getMonth() === new Date().getMonth();
     view = new Date();
     view.setDate(1);
     selected = todayKey;
     renderAll();
     load();
+    if (!same) loadMemo();
   }
 
   // ---------- 날짜 옮기기 (끌어 놓기) ----------
@@ -1054,10 +1057,32 @@
     $('blur').checked = !!config.blurPref;
     $('blur').disabled = !config.blurAvailable;
     $('blurHint').textContent = config.blurAvailable ? '바꾸면 프로그램이 다시 시작됩니다' : '윈도우 11에서만 지원';
+    $('showMemo').checked = config.showMemo !== false;
+    $('memoSync').checked = config.memoSync !== false && !!config.icloud;
+    $('memoSync').disabled = !config.icloud;
+    $('memoSyncHint').textContent = config.icloud ? '윈도우·맥에서 같은 메모를 봅니다' : '아이클라우드를 연결하면 켤 수 있어요';
+    applyMemoLayout();
+    applyPlatform();
+    const cloudNow = !!(config.icloud && config.memoSync !== false);
+    if (memoCloudSeen !== null && memoCloudSeen !== cloudNow) loadMemo();
+    memoCloudSeen = cloudNow;
     renderCalList();
     renderIcloud();
     renderGoogle();
     renderDefaultCal();
+  }
+
+  // 맥이면 단축키 표시·문구를 맥에 맞게
+  function applyPlatform() {
+    const mac = config.platform === 'darwin';
+    document.body.classList.toggle('mac', mac);
+    document.querySelectorAll('.mod-key').forEach((k) => (k.textContent = mac ? '⌘' : 'Ctrl'));
+    $('searchBtn').title = `일정 검색 (${mac ? '⌘F' : 'Ctrl+F'})`;
+    if (mac) {
+      $('autoStartLabel').firstChild.textContent = '맥에 로그인하면 자동 실행';
+      $('hideHint').textContent = '메뉴 막대 아이콘으로 다시 열기';
+      if (config.blurAvailable) $('blurHint').textContent = '바꾸면 프로그램이 다시 시작됩니다';
+    }
   }
 
   function openSettings(focusIcloud) {
@@ -1073,7 +1098,7 @@
   }
   const closeSettings = () => $('settings').classList.add('hidden');
   const anyOverlayOpen = () =>
-    !$('settings').classList.contains('hidden') || !$('composer').classList.contains('hidden') || !$('arrange').classList.contains('hidden');
+    !$('settings').classList.contains('hidden') || !$('composer').classList.contains('hidden') || !$('arrange').classList.contains('hidden') || searchOpen();
 
   // ---------- 위치·크기 조정 (평소에는 잠금) ----------
   function startArrange() {
@@ -1132,6 +1157,300 @@
     };
   }
 
+  // ---------- 월별 메모 ----------
+  // 지금 보고 있는 달의 메모를 달력 아래에 보여 주고, 쓰는 대로 저장
+  const monthKeyOf = (v) => `${v.getFullYear()}-${pad(v.getMonth() + 1)}`;
+  let memoMonth = '';
+  let memoTimer = null;
+  let memoSaving = false;
+  let memoCloudSeen = null;
+
+  function setMemoState(st) {
+    const el = $('memoState');
+    el.classList.remove('err', 'ok');
+    el.title = '';
+    if (!st) { el.textContent = ''; return; }
+    if (st.pending) { el.textContent = '저장 중…'; return; }
+    if (!st.cloud) {
+      el.textContent = config.icloud ? '이 PC에만 저장' : '이 PC에만 저장 · 아이클라우드를 연결하면 다른 기기와 함께 봐요';
+      return;
+    }
+    if (st.error) {
+      el.textContent = '아이클라우드 저장 실패 · 이 PC에는 저장됨';
+      el.title = st.error;
+      el.classList.add('err');
+      return;
+    }
+    if (st.synced) { el.textContent = '아이클라우드에 저장됨'; el.classList.add('ok'); return; }
+    el.textContent = '아이클라우드에 올리는 중…';
+  }
+
+  function applyMemoLayout() {
+    const on = config.showMemo !== false;
+    $('memoBox').classList.toggle('hidden', !on);
+    document.querySelector('.frame').style.setProperty('--memo-h', `${on ? Number(config.memoHeight) || 120 : 0}px`);
+  }
+
+  async function flushMemo() {
+    if (!memoTimer && !memoSaving) return;
+    clearTimeout(memoTimer);
+    memoTimer = null;
+    const month = memoMonth;
+    const text = $('memoText').value;
+    memoSaving = true;
+    let res;
+    try {
+      res = await api.memoSet(month, text);
+    } catch (e) {
+      res = { cloud: true, synced: false, error: errText(e) };
+    }
+    memoSaving = false;
+    if (month === memoMonth && !memoTimer) setMemoState(res);
+  }
+
+  async function loadMemo() {
+    const month = monthKeyOf(view);
+    if (memoTimer) await flushMemo(); // 앞 달에 쓰던 메모 먼저 저장
+    const changedMonth = month !== memoMonth;
+    memoMonth = month;
+    $('memoTitle').textContent = `${view.getMonth() + 1}월 메모`;
+    const ta = $('memoText');
+    let local;
+    try { local = await api.memoGet(month); } catch { return; }
+    if (memoMonth !== month) return;
+    if (changedMonth || (!memoTimer && document.activeElement !== ta)) ta.value = local.text;
+    setMemoState(local);
+    if (local.cloud) syncMemo(month, local.text);
+  }
+
+  // 다른 기기에서 고친 메모 받아 오기 (지금 쓰는 중이면 건드리지 않음)
+  async function syncMemo(month = memoMonth, shown = $('memoText').value) {
+    let res;
+    try { res = await api.memoSync(month); } catch { return; }
+    const ta = $('memoText');
+    if (memoMonth !== month || memoTimer || memoSaving) return;
+    if (ta.value === shown && ta.value !== res.text) {
+      const focused = document.activeElement === ta;
+      const pos = ta.selectionStart;
+      ta.value = res.text;
+      if (focused) ta.setSelectionRange(Math.min(pos, ta.value.length), Math.min(pos, ta.value.length));
+    }
+    setMemoState(res);
+  }
+
+  function wireMemo() {
+    const ta = $('memoText');
+    ta.addEventListener('input', () => {
+      clearTimeout(memoTimer);
+      memoTimer = setTimeout(flushMemo, 700);
+      setMemoState({ pending: true });
+    });
+    ta.addEventListener('blur', () => { if (memoTimer) flushMemo(); });
+    ta.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); ta.blur(); }
+    });
+    window.addEventListener('beforeunload', () => { if (memoTimer) flushMemo(); });
+
+    // 메모칸 높이 조절 (경계선을 위아래로 끌기)
+    const split = $('memoSplit');
+    let drag = null;
+    split.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      split.setPointerCapture(e.pointerId);
+      drag = { y: e.clientY, h: Number(config.memoHeight) || 120 };
+      split.classList.add('on');
+    });
+    split.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const max = Math.max(80, document.querySelector('.frame').clientHeight - 230);
+      const h = Math.round(Math.min(max, Math.max(60, drag.h - (e.clientY - drag.y))));
+      config.memoHeight = h;
+      applyMemoLayout();
+    });
+    const end = () => {
+      if (!drag) return;
+      drag = null;
+      split.classList.remove('on');
+      saveConfig({ memoHeight: config.memoHeight });
+    };
+    split.addEventListener('pointerup', end);
+    split.addEventListener('pointercancel', end);
+    split.addEventListener('dblclick', () => { config.memoHeight = 120; applyMemoLayout(); saveConfig({ memoHeight: 120 }); });
+
+    // 2분마다, 그리고 창으로 돌아왔을 때 다른 기기 메모 받아 오기
+    setInterval(() => { if (document.activeElement !== ta) syncMemo(); }, 2 * 60 * 1000);
+    window.addEventListener('focus', () => { if (document.activeElement !== ta && memoMonth) syncMemo(); });
+  }
+
+  // ---------- 일정 검색 ----------
+  let searchToken = 0;
+  let searchTimer = null;
+  let searchActive = -1;
+  let searchItems = [];
+  const searchOpen = () => !$('search').classList.contains('hidden');
+
+  function openSearch() {
+    hidePopover();
+    closeSettings();
+    $('search').classList.remove('hidden');
+    const input = $('searchInput');
+    input.focus();
+    input.select();
+    api.searchWarm();
+    if (input.value.trim() && !searchItems.length) runSearch();
+  }
+  function closeSearch() {
+    $('search').classList.add('hidden');
+    searchToken++;
+  }
+
+  // 찾은 글자 굵게 표시
+  function highlight(el, text, words) {
+    el.textContent = '';
+    const low = text.toLowerCase();
+    const marks = [];
+    for (const w of words) {
+      let i = low.indexOf(w);
+      while (w && i >= 0) { marks.push([i, i + w.length]); i = low.indexOf(w, i + w.length); }
+    }
+    marks.sort((a, b) => a[0] - b[0]);
+    let pos = 0;
+    for (const [a, b] of marks) {
+      if (a < pos) continue;
+      if (a > pos) el.appendChild(document.createTextNode(text.slice(pos, a)));
+      const m = document.createElement('mark');
+      m.textContent = text.slice(a, b);
+      el.appendChild(m);
+      pos = b;
+    }
+    if (pos < text.length) el.appendChild(document.createTextNode(text.slice(pos)));
+  }
+
+  function setSearchActive(i) {
+    const lis = [...$('searchList').querySelectorAll('li.hit')];
+    if (!lis.length) { searchActive = -1; return; }
+    searchActive = Math.max(0, Math.min(lis.length - 1, i));
+    lis.forEach((li, n) => li.classList.toggle('active', n === searchActive));
+    lis[searchActive].scrollIntoView({ block: 'nearest' });
+  }
+
+  function renderSearch(res, words) {
+    const list = $('searchList');
+    list.innerHTML = '';
+    searchItems = res.results || [];
+    searchActive = -1;
+    const info = [];
+    if (!searchItems.length) info.push('찾는 일정이 없어요');
+    else info.push(`${res.total}개 찾음${res.total > searchItems.length ? ` · 최근 ${searchItems.length}개만 보여 줘요` : ''}`);
+    if (res.range) info.push(`${res.range[0]}년 전 ~ ${res.range[1]}년 뒤 일정에서 찾았어요`);
+    $('searchInfo').textContent = info.join(' · ');
+    if (res.errors && res.errors.length) {
+      const s = document.createElement('span');
+      s.className = 'err';
+      s.textContent = ` · 일부 캘린더를 못 읽었어요 (${res.errors.map((e) => e.name).join(', ')})`;
+      $('searchInfo').appendChild(s);
+    }
+    let lastMonth = '';
+    const todayK = keyOf(new Date());
+    let todayLine = false;
+    searchItems.forEach((ev, idx) => {
+      const ym = ev.startDay.slice(0, 7);
+      if (!todayLine && ev.startDay < todayK && idx > 0 && searchItems[idx - 1].startDay >= todayK) {
+        const li = document.createElement('li');
+        li.className = 'now-line';
+        li.textContent = '오늘';
+        list.appendChild(li);
+        todayLine = true;
+      }
+      if (ym !== lastMonth) {
+        lastMonth = ym;
+        const h = document.createElement('li');
+        h.className = 'month';
+        const [y, m] = ym.split('-').map(Number);
+        h.textContent = `${y}년 ${m}월`;
+        list.appendChild(h);
+      }
+      const li = document.createElement('li');
+      li.className = 'hit' + (ev.startDay < todayK ? ' past' : '');
+      li.style.setProperty('--c', ev.color);
+      const d = parseKey(ev.startDay);
+      li.innerHTML = '<span class="when"><b></b><small></small></span><span class="dot"></span><span class="what"><span class="n"></span><span class="w"></span></span>';
+      li.querySelector('.when b').textContent = `${d.getDate()}일`;
+      li.querySelector('.when small').textContent = `${WEEK[d.getDay()]} ${ev.allDay ? '종일' : fmtTime(ev.start)}`;
+      highlight(li.querySelector('.n'), ev.title, words);
+      const where = [ev.location, ev.notes && words.some((w) => !ev.title.toLowerCase().includes(w) && !(ev.location || '').toLowerCase().includes(w)) ? ev.notes.replace(/\s+/g, ' ').slice(0, 80) : ''].filter(Boolean).join(' · ');
+      highlight(li.querySelector('.w'), where, words);
+      li.title = `${dayLabel(ev.startDay)} ${ev.title}`;
+      li.addEventListener('click', () => jumpToEvent(ev));
+      list.appendChild(li);
+    });
+  }
+
+  async function runSearch(force = false) {
+    const q = $('searchInput').value.trim();
+    const token = ++searchToken;
+    if (!q) {
+      $('searchList').innerHTML = '';
+      $('searchInfo').textContent = '제목, 장소, 메모에 들어 있는 낱말로 찾아요. 띄어 쓰면 모두 들어간 일정만 찾아요.';
+      searchItems = [];
+      return;
+    }
+    $('searchInfo').textContent = '찾는 중… (처음 한 번은 일정을 모으느라 몇 초 걸려요)';
+    let res;
+    try {
+      res = await api.search(q, force);
+    } catch (e) {
+      res = { results: [], total: 0, errors: [{ name: '검색', message: errText(e) }] };
+    }
+    if (token !== searchToken) return;
+    renderSearch(res, q.toLowerCase().split(/\s+/).filter(Boolean));
+  }
+
+  // 검색 결과를 누르면 그 날짜로 가서 일정 보여 주기
+  async function jumpToEvent(ev) {
+    closeSearch();
+    const d = parseKey(ev.startDay);
+    view = new Date(d.getFullYear(), d.getMonth(), 1);
+    selected = ev.startDay;
+    const [from, to] = rangeOf(view);
+    const cached = monthCache.get(`${from}|${to}`);
+    if (cached) show(cached);
+    else { events = []; indexEvents(); }
+    renderAll();
+    loadMemo();
+    await load();
+    const cell = document.querySelector(`.cell[data-key="${ev.startDay}"]`);
+    if (!cell) return;
+    cell.classList.add('flash');
+    setTimeout(() => cell.classList.remove('flash'), 1600);
+    const same = events.find((x) => x.uid === ev.uid && x.startDay === ev.startDay && (x.start || '') === (ev.start || '')) || ev;
+    const chip = [...cell.querySelectorAll('.chip')].find((c) => c.title === same.title);
+    showPopover(same, chip || cell);
+  }
+
+  function wireSearch() {
+    $('searchBtn').onclick = () => (searchOpen() ? closeSearch() : openSearch());
+    $('searchClose').onclick = closeSearch;
+    const input = $('searchInput');
+    input.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => runSearch(), 250);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSearchActive(searchActive + 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setSearchActive(searchActive - 1); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        const lis = [...$('searchList').querySelectorAll('li.hit')];
+        if (searchActive >= 0 && lis[searchActive]) lis[searchActive].click();
+        else if (lis.length) lis[0].click();
+        else runSearch(true);
+      } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSearch(); }
+    });
+    api.on('open-search', openSearch);
+    runSearch();
+  }
+
   // ---------- 연결 ----------
   function wire() {
     wireUpdate();
@@ -1155,6 +1474,7 @@
 
     $('grid').addEventListener('click', (e) => {
       hidePopover();
+      if (searchOpen()) closeSearch();
       const cell = e.target.closest('.cell');
       if (!cell) return;
       selected = cell.dataset.key;
@@ -1167,13 +1487,22 @@
     });
     wireComposer();
     wireDrop();
+    wireMemo();
+    wireSearch();
 
     document.addEventListener('mousedown', (e) => {
       if (!$('evPop').classList.contains('hidden') && !e.target.closest('#evPop') && !e.target.closest('.chip') && !e.target.closest('.more')) hidePopover();
     });
     document.addEventListener('keydown', (e) => {
+      // Ctrl+F (맥은 ⌘F): 일정 검색
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'f' || e.key === 'F' || e.key === 'ㄹ')) {
+        e.preventDefault();
+        if ($('composer').classList.contains('hidden') && $('arrange').classList.contains('hidden')) openSearch();
+        return;
+      }
       if (e.key === 'Escape' || (e.key === 'Enter' && !$('arrange').classList.contains('hidden'))) {
         if (!$('arrange').classList.contains('hidden')) endArrange();
+        else if (e.key === 'Escape' && searchOpen()) closeSearch();
         else if (e.key !== 'Escape') return;
         else if (!$('composer').classList.contains('hidden')) closeComposer();
         else if (!$('settings').classList.contains('hidden')) closeSettings();
@@ -1200,6 +1529,8 @@
     document.querySelectorAll('#weekSeg button').forEach((b) => (b.onclick = () => saveConfig({ weekStart: Number(b.dataset.v) }).then(() => { renderAll(); load(); })));
     $('showTerms').onchange = (e) => saveConfig({ showTerms: e.target.checked }).then(renderAll);
     $('showLunar').onchange = (e) => saveConfig({ showLunar: e.target.checked }).then(renderAll);
+    $('showMemo').onchange = (e) => saveConfig({ showMemo: e.target.checked });
+    $('memoSync').onchange = (e) => saveConfig({ memoSync: e.target.checked });
     $('opacity').oninput = (e) => saveConfig({ opacity: Number(e.target.value) });
     $('alwaysOnTop').onchange = (e) => saveConfig({ alwaysOnTop: e.target.checked });
     $('autoStart').onchange = (e) => saveConfig({ autoStart: e.target.checked });
@@ -1264,6 +1595,7 @@
     wire();
     renderAll();
     load();
+    loadMemo();
   }
   start();
 })();

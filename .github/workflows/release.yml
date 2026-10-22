@@ -1,6 +1,6 @@
-# 프로그램 코드가 main에 올라오면 윈도우용 설치 파일을 만들어 Releases에 올립니다.
+# 프로그램 코드가 main에 올라오면 윈도우·맥용 설치 파일을 만들어 Releases에 올립니다.
 # 버전 번호는 package.json의 version을 따릅니다 (예: 0.5.1 → v0.5.1).
-name: Windows 빌드와 배포
+name: 윈도우·맥 빌드와 배포
 
 on:
   push:
@@ -25,6 +25,8 @@ jobs:
         shell: bash
         run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - run: npm ci
+      - name: 시험 실행
+        run: npm test
       - name: 구글 등록 값 넣기 (GitHub 비밀 칸에서)
         shell: bash
         env:
@@ -52,3 +54,48 @@ jobs:
             dist/DeskCal-Setup.exe.blockmap
             dist/latest.yml
             dist/DeskCal-Windows.zip
+
+  # 맥용 (윈도우용이 올라간 다음, 같은 Releases에 덧붙임)
+  mac:
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: 버전 읽기
+        id: ver
+        shell: bash
+        run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - name: 구글 등록 값 넣기 (GitHub 비밀 칸에서)
+        shell: bash
+        env:
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          node -e "const fs=require('fs');const f='src/google-client.json';const j=JSON.parse(fs.readFileSync(f,'utf8'));j.client_secret=process.env.GOOGLE_CLIENT_SECRET||'';if(!j.client_secret){console.error('GOOGLE_CLIENT_SECRET 비밀 값이 없습니다');process.exit(1)}fs.writeFileSync(f,JSON.stringify(j,null,2))"
+      - name: 맥용 만들기 (애플 실리콘·인텔)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx electron-builder --mac --arm64 --x64 --publish never
+      - name: Releases에 덧붙이기
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          overwrite_files: true
+          append_body: true
+          body: |
+
+            ## 맥
+            - **DeskCal-Mac-arm64.dmg** — 애플 실리콘(M1~M5) 맥
+            - **DeskCal-Mac-x64.dmg** — 인텔 맥
+
+            dmg를 열고 DeskCal을 '응용 프로그램' 폴더로 끌어 넣으세요. 처음 열 때 '확인할 수 없음' 창이 뜨면
+            시스템 설정 → 개인정보 보호 및 보안 → 아래쪽의 '그래도 열기'를 누르세요.
+          files: |
+            dist/DeskCal-Mac-arm64.dmg
+            dist/DeskCal-Mac-x64.dmg
+            dist/DeskCal-Mac-arm64.zip
+            dist/DeskCal-Mac-x64.zip

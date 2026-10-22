@@ -372,3 +372,79 @@ select option { background: var(--card); color: var(--text); }
 .update-bar .small-tb svg { width: 14px; height: 14px; }
 .btn { white-space: nowrap; }
 .keys .row > span:first-child { flex-direction: row; align-items: center; gap: 4px; }
+
+/* ---------- 월별 메모 (달력 아래) ---------- */
+.frame { --memo-h: 120px; }
+.memo {
+  position: relative; flex: none; height: var(--memo-h); display: flex; flex-direction: column;
+  border-top: 0.5px solid var(--hair); background: var(--weekend);
+}
+.memo-split {
+  position: absolute; left: 0; right: 0; top: -4px; height: 8px; cursor: ns-resize; z-index: 3;
+}
+.memo-split::after {
+  content: ""; position: absolute; left: 50%; top: 2px; width: 36px; height: 4px; margin-left: -18px;
+  border-radius: 2px; background: var(--faint); opacity: 0; transition: opacity 0.15s;
+}
+.memo:hover .memo-split::after, .memo-split.on::after { opacity: 1; }
+.memo-head { flex: none; display: flex; align-items: baseline; gap: 10px; padding: 8px 20px 2px; }
+.memo-title { font-weight: 600; font-size: 13px; }
+.memo-state { font-size: 11px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.memo-state.ok::before { content: "☁︎ "; }
+.memo-state.err { color: var(--red); cursor: help; }
+.memo-text {
+  flex: 1; min-height: 0; width: 100%; resize: none; border: 0; outline: none; background: transparent;
+  padding: 4px 20px 12px; font-size: 13px; line-height: 1.55; user-select: text;
+}
+.memo-text::placeholder { color: var(--sub); }
+.memo-text:focus { background: color-mix(in srgb, var(--blue) 4%, transparent); }
+.frame:has(.memo:not(.hidden)) .status { bottom: calc(var(--memo-h) + 6px); }
+
+/* ---------- 일정 검색 ---------- */
+.search {
+  position: absolute; z-index: 15; top: 50px; right: 12px; width: min(400px, calc(100% - 24px));
+  max-height: calc(100% - 62px); display: flex; flex-direction: column;
+  background: var(--pop); border-radius: 12px; box-shadow: var(--shadow); animation: pop 0.12s ease-out;
+  -webkit-backdrop-filter: blur(20px); overflow: hidden; user-select: text;
+}
+.search-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 12px 8px; }
+.search-bar svg { width: 16px; height: 16px; color: var(--sub); flex: none; }
+.search-bar input {
+  flex: 1; min-width: 0; border: 0; outline: none; background: var(--field); border-radius: 8px;
+  padding: 6px 10px; font-size: 13px;
+}
+.search-bar input:focus { box-shadow: 0 0 0 2px color-mix(in srgb, var(--blue) 55%, transparent); }
+.search-bar input::-webkit-search-cancel-button { cursor: pointer; }
+.search-info { flex: none; padding: 0 14px 6px; font-size: 11px; color: var(--sub); }
+.search-info:empty { display: none; }
+.search-info .err { color: var(--red); }
+.search-list { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 0 6px 8px; }
+.search-list li.month {
+  position: sticky; top: 0; z-index: 1; background: var(--pop); font-size: 11.5px; font-weight: 600;
+  color: var(--sub); padding: 8px 8px 4px;
+}
+.search-list li.now-line {
+  font-size: 10.5px; color: var(--red); font-weight: 600; padding: 4px 8px; display: flex; align-items: center; gap: 8px;
+}
+.search-list li.now-line::after { content: ""; flex: 1; height: 1px; background: var(--red); opacity: 0.5; }
+.search-list li.hit {
+  display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; cursor: pointer;
+}
+.search-list li.hit:hover, .search-list li.hit.active { background: var(--sel); }
+.search-list li.hit.past .what { opacity: 0.75; }
+.search-list .when { width: 54px; flex: none; display: flex; flex-direction: column; line-height: 1.2; }
+.search-list .when b { font-family: var(--font-num); font-size: 13px; font-weight: 600; }
+.search-list .when small { font-size: 10.5px; color: var(--sub); font-variant-numeric: tabular-nums; }
+.search-list .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+.search-list .what { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.search-list .what .n { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-list .what .w { font-size: 11px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-list .what .w:empty { display: none; }
+.search-list mark { background: color-mix(in srgb, #ffcc00 45%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+
+/* 검색에서 넘어온 날짜 깜빡임 */
+.cell.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { 0%, 40% { box-shadow: inset 0 0 0 2px var(--blue); background-color: var(--sel); } 100% { box-shadow: none; } }
+
+/* 맥: 시스템 글꼴 */
+body.mac { --font: -apple-system, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; --font-num: -apple-system, "SF Pro Display", "Apple SD Gothic Neo", sans-serif; }

@@ -5,6 +5,11 @@ contextBridge.exposeInMainWorld('deskcal', {
   getConfig: () => ipcRenderer.invoke('config:get'),
   setConfig: (patch) => ipcRenderer.invoke('config:set', patch),
   getEvents: (from, to, force) => ipcRenderer.invoke('events:get', { from, to, force: !!force }),
+  search: (query, force) => ipcRenderer.invoke('events:search', { query, force: !!force }),
+  searchWarm: () => ipcRenderer.invoke('events:search-warm'),
+  memoGet: (month) => ipcRenderer.invoke('memo:get', month),
+  memoSync: (month) => ipcRenderer.invoke('memo:sync', month),
+  memoSet: (month, text) => ipcRenderer.invoke('memo:set', { month, text }),
   openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
   icloudConnect: (appleId, password) => ipcRenderer.invoke('icloud:connect', { appleId, password }),
   icloudDisconnect: () => ipcRenderer.invoke('icloud:disconnect'),
@@ -26,7 +31,7 @@ contextBridge.exposeInMainWorld('deskcal', {
   hide: () => ipcRenderer.invoke('app:hide'),
   quit: () => ipcRenderer.invoke('app:quit'),
   on: (channel, fn) => {
-    if (['open-settings', 'refresh', 'config-changed', 'start-arrange', 'update-state'].includes(channel)) {
+    if (['open-settings', 'refresh', 'config-changed', 'start-arrange', 'update-state', 'open-search'].includes(channel)) {
       ipcRenderer.on(channel, (_e, data) => fn(data));
     }
   },

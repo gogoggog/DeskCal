@@ -17,6 +17,9 @@
       <div class="today-sub" id="todaySub"></div>
       <div class="spacer"></div>
       <div class="tools no-drag">
+        <button class="tb" id="searchBtn" title="일정 검색 (Ctrl+F)" aria-label="일정 검색">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+        </button>
         <button class="tb" id="syncBtn" title="새로고침" aria-label="새로고침">
           <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3.5V8h4.5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20.5V16h-4.5"/></svg>
         </button>
@@ -47,6 +50,27 @@
     <div class="weekdays" id="weekdays"></div>
     <div class="grid" id="grid" role="grid" aria-label="월간 달력"></div>
     <div class="status" id="status"></div>
+
+    <!-- 월별 메모 -->
+    <section class="memo" id="memoBox" aria-label="이달 메모">
+      <div class="memo-split no-drag" id="memoSplit" title="끌어서 메모칸 높이 조절"></div>
+      <div class="memo-head">
+        <span class="memo-title" id="memoTitle">메모</span>
+        <span class="memo-state" id="memoState"></span>
+      </div>
+      <textarea class="memo-text" id="memoText" placeholder="이달에 기억할 것을 적어 두세요" spellcheck="false" maxlength="20000"></textarea>
+    </section>
+
+    <!-- 일정 검색 -->
+    <div class="search hidden" id="search" role="dialog" aria-label="일정 검색">
+      <div class="search-bar">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+        <input id="searchInput" type="search" placeholder="일정 검색 (제목·장소·메모)" autocomplete="off" spellcheck="false" />
+        <button class="link-btn" id="searchClose">닫기</button>
+      </div>
+      <div class="search-info" id="searchInfo"></div>
+      <ul class="search-list" id="searchList"></ul>
+    </div>
   </div>
 
   <!-- 위치·크기 조정 모드 (평소에는 잠겨 있음) -->
@@ -126,6 +150,8 @@
         </div>
         <label class="row"><span>24절기 표시</span><input type="checkbox" class="switch" id="showTerms" /></label>
         <label class="row"><span>음력 날짜 표시</span><input type="checkbox" class="switch" id="showLunar" /></label>
+        <label class="row"><span>달력 아래 메모칸</span><input type="checkbox" class="switch" id="showMemo" /></label>
+        <label class="row" id="memoSyncRow"><span>메모를 아이클라우드에 저장<small id="memoSyncHint">윈도우·맥에서 같은 메모를 봅니다</small></span><input type="checkbox" class="switch" id="memoSync" /></label>
         <label class="row" id="blurRow"><span>배경 흐림 효과<small id="blurHint"></small></span><input type="checkbox" class="switch" id="blur" /></label>
         <div class="row"><span>창 투명도</span><input type="range" id="opacity" min="0.5" max="1" step="0.02" /></div>
       </div>
@@ -137,7 +163,7 @@
       <div class="group-title">동작</div>
       <div class="group">
         <label class="row"><span>항상 다른 창 위에 표시</span><input type="checkbox" class="switch" id="alwaysOnTop" /></label>
-        <label class="row"><span>윈도우 시작 시 자동 실행<small id="autoStartHint"></small></span><input type="checkbox" class="switch" id="autoStart" /></label>
+        <label class="row"><span id="autoStartLabel">윈도우 시작 시 자동 실행<small id="autoStartHint"></small></span><input type="checkbox" class="switch" id="autoStart" /></label>
         <div class="row"><span>버전 <b id="verText"></b><small id="updHint"></small></span><button class="btn" id="checkUpd">업데이트 확인</button></div>
       </div>
 
@@ -148,10 +174,11 @@
         <div class="row"><span><kbd>←</kbd> <kbd>→</kbd> / 마우스 휠</span><span class="sub">이전·다음 달</span></div>
         <div class="row"><span><kbd>T</kbd></span><span class="sub">오늘</span></div>
         <div class="row"><span><kbd>N</kbd></span><span class="sub">새로운 이벤트</span></div>
+        <div class="row"><span><kbd class="mod-key">Ctrl</kbd> <kbd>F</kbd></span><span class="sub">일정 검색</span></div>
       </div>
 
       <div class="group">
-        <button class="row action" id="hideBtn">달력 숨기기 <span class="sub">트레이 아이콘으로 다시 열기</span></button>
+        <button class="row action" id="hideBtn">달력 숨기기 <span class="sub" id="hideHint">트레이 아이콘으로 다시 열기</span></button>
         <button class="row action danger-text" id="quitBtn">프로그램 종료</button>
       </div>
       <p class="foot-note">DeskCal</p>

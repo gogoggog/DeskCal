@@ -5,11 +5,15 @@ const fs = require('fs');
 const { downloadIcs, extractEvents, normalizeUrl } = require('./calendar');
 const icloud = require('./icloud');
 const google = require('./google');
+const memo = require('./memo');
 const os = require('os');
+
+const IS_MAC = process.platform === 'darwin';
 
 // 윈도우 11(22H2 이상)이면 뒤가 흐리게 비치는 효과(아크릴) 사용
 let useAcrylic = false;
 function acrylicSupported() {
+  if (IS_MAC) return true; // 맥은 기본으로 흐림 효과(비브런시) 지원
   if (process.platform !== 'win32') return false;
   const build = Number(String(os.release()).split('.')[2] || 0);
   return build >= 22621;
@@ -38,11 +42,16 @@ const DEFAULT_CONFIG = {
   google: null,
   // 새 일정 기본 캘린더 (아이클라우드 주소 또는 'g:구글캘린더ID')
   defaultCal: '',
+  // 달력 아래 메모칸
+  showMemo: true,
+  memoHeight: 120, // 메모칸 높이(px)
+  memoSync: true, // 아이클라우드가 연결돼 있으면 메모도 아이클라우드에 저장
 };
 
 const dataDir = () => app.getPath('userData');
 const configPath = () => path.join(dataDir(), 'config.json');
 const cachePath = () => path.join(dataDir(), 'cache.json');
+const memosPath = () => path.join(dataDir(), 'memos.json');
 
 function readJson(file, fallback) {
   try {
@@ -78,6 +87,8 @@ function loadConfig() {
   }
   if (!Array.isArray(config.calendars)) config.calendars = DEFAULT_CONFIG.calendars;
   cache = readJson(cachePath(), {});
+  memos = readJson(memosPath(), {});
+  if (!memos || typeof memos !== 'object' || Array.isArray(memos)) memos = {};
 }
 
 function saveBounds() {
@@ -100,14 +111,17 @@ function createWindow() {
   const defaults = { width: dw, height: dh, x: area.x + area.width - dw - 20, y: area.y + 20 };
   const b = config.bounds && boundsAreVisible(config.bounds) ? config.bounds : defaults;
 
+  let look;
+  if (useAcrylic && IS_MAC) look = { transparent: true, vibrancy: 'under-window', visualEffectState: 'active', backgroundColor: '#00000000', roundedCorners: true };
+  else if (useAcrylic) look = { transparent: false, backgroundMaterial: 'acrylic', backgroundColor: '#00000000', roundedCorners: true };
+  else look = { transparent: true, backgroundColor: '#00000000' };
   win = new BrowserWindow({
     ...b,
     minWidth: 480,
     minHeight: 380,
     frame: false,
-    ...(useAcrylic
-      ? { transparent: false, backgroundMaterial: 'acrylic', backgroundColor: '#00000000', roundedCorners: true }
-      : { transparent: true, backgroundColor: '#00000000' }),
+    ...look,
+    hasShadow: !IS_MAC || useAcrylic,
     resizable: false, // 평소에는 잠금 (위치·크기 조정 모드에서만 풀림)
     movable: true,
     skipTaskbar: true, // 작업표시줄에 안 보이게 (트레이 아이콘으로 관리)
@@ -123,6 +137,8 @@ function createWindow() {
     },
   });
   win.setOpacity(Number(config.opacity) || 1);
+  // 맥: 모든 데스크탑(스페이스)에 보이게
+  if (IS_MAC) win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.once('ready-to-show', () => win.showInactive());
 
@@ -143,7 +159,15 @@ function createWindow() {
 }
 
 function createTray() {
-  const img = nativeImage.createFromPath(path.join(__dirname, '..', 'build', 'icon.png')).resize({ width: 16, height: 16 });
+  let img;
+  if (IS_MAC) {
+    // 맥 메뉴 막대용 흑백 아이콘 (밝은·어두운 메뉴 막대에 맞춰 자동으로 색이 바뀜)
+    img = nativeImage.createFromPath(path.join(__dirname, '..', 'build', 'trayTemplate.png'));
+    if (img.isEmpty()) img = nativeImage.createFromPath(path.join(__dirname, '..', 'build', 'icon.png')).resize({ width: 16, height: 16 });
+    else img.setTemplateImage(true);
+  } else {
+    img = nativeImage.createFromPath(path.join(__dirname, '..', 'build', 'icon.png')).resize({ width: 16, height: 16 });
+  }
   tray = new Tray(img);
   tray.setToolTip('DeskCal 달력');
   const rebuild = () =>
@@ -152,6 +176,7 @@ function createTray() {
         { label: '달력 보이기', click: () => { win.show(); win.focus(); } },
         { label: '설정', click: () => { win.show(); win.webContents.send('open-settings'); } },
         { label: '새로고침', click: () => win.webContents.send('refresh') },
+        { label: '일정 검색', click: () => { win.show(); win.focus(); win.webContents.send('open-search'); } },
         { label: '업데이트 확인', click: () => { win.show(); checkUpdate(true); } },
         { type: 'separator' },
         {
@@ -176,7 +201,7 @@ function createTray() {
       ])
     );
   rebuild();
-  tray.on('click', () => { win.show(); win.focus(); });
+  if (!IS_MAC) tray.on('click', () => { win.show(); win.focus(); }); // 맥은 누르면 메뉴가 열림
   return rebuild;
 }
 
@@ -203,7 +228,7 @@ function publicConfig() {
     ? { appleId: ic.appleId, calendars: ic.calendars || [], defaultCal: ic.defaultCal || '' }
     : null;
   const gPublic = g ? { email: g.email, calendars: g.calendars || [] } : null;
-  return { ...rest, icloud: icPublic, google: gPublic, defaultCal: currentDefaultCal(), isPackaged: app.isPackaged, blurPref: config.blur !== false, blurAvailable: acrylicSupported(), blurActive: useAcrylic };
+  return { ...rest, platform: process.platform, icloud: icPublic, google: gPublic, defaultCal: currentDefaultCal(), isPackaged: app.isPackaged, blurPref: config.blur !== false, blurAvailable: acrylicSupported(), blurActive: useAcrylic };
 }
 
 // ---------- 아이클라우드 ----------
@@ -257,6 +282,7 @@ ipcMain.handle('icloud:disconnect', () => {
   icloud.disconnect();
   config.icloud = null;
   icCache.clear();
+  dropSearch();
   return applySettings({});
 });
 
@@ -291,12 +317,14 @@ ipcMain.handle('event:create', async (_e, { calUrl, event }) => {
     if (!ensureGoogle()) throw new Error('먼저 설정에서 구글 계정으로 로그인해 주세요');
     await google.createEvent(target.slice(2), event); // 구글은 일정 색을 구글 쪽에 저장
     gCache.clear();
+    dropSearch();
     return true;
   }
   if (!(await ensureIcloud())) throw new Error('먼저 설정에서 캘린더 계정을 연결해 주세요');
   const { uid } = await icloud.createEvent(target || config.icloud.defaultCal, event);
   rememberColor(uid, event && event.color);
   icCache.clear();
+  dropSearch();
   return true;
 });
 
@@ -305,12 +333,14 @@ ipcMain.handle('event:update', async (_e, { objUrl, uid, event }) => {
     if (!ensureGoogle()) throw new Error('구글에 로그인되어 있지 않습니다');
     await google.updateEvent(objUrl, event);
     gCache.clear();
+    dropSearch();
     return true;
   }
   if (!(await ensureIcloud())) throw new Error('아이클라우드에 연결되어 있지 않습니다');
   await icloud.updateEvent(objUrl, event);
   rememberColor(uid, event && event.color);
   icCache.clear();
+  dropSearch();
   return true;
 });
 
@@ -319,11 +349,13 @@ ipcMain.handle('event:delete', async (_e, { objUrl, etag }) => {
     if (!ensureGoogle()) throw new Error('구글에 로그인되어 있지 않습니다');
     await google.deleteEvent(objUrl);
     gCache.clear();
+    dropSearch();
     return true;
   }
   if (!(await ensureIcloud())) throw new Error('아이클라우드에 연결되어 있지 않습니다');
   await icloud.deleteEvent(objUrl, etag);
   icCache.clear();
+  dropSearch();
   return true;
 });
 
@@ -406,9 +438,11 @@ const icCache = new Map(); // 같은 달을 자주 다시 불러오지 않도록
 ipcMain.handle('config:get', () => publicConfig());
 
 ipcMain.handle('config:set', (_e, patch) => {
-  const allowed = ['calendars', 'alwaysOnTop', 'autoStart', 'opacity', 'theme', 'weekStart', 'showTerms', 'showLunar', 'blur'];
+  const allowed = ['calendars', 'alwaysOnTop', 'autoStart', 'opacity', 'theme', 'weekStart', 'showTerms', 'showLunar', 'blur', 'showMemo', 'memoHeight', 'memoSync'];
   const clean = {};
   for (const k of allowed) if (k in (patch || {})) clean[k] = patch[k];
+  if ('memoHeight' in clean) clean.memoHeight = Math.round(Math.min(600, Math.max(60, Number(clean.memoHeight) || 120)));
+  for (const k of ['showMemo', 'memoSync']) if (k in clean) clean[k] = !!clean[k];
   if (clean.calendars) {
     clean.calendars = clean.calendars
       .filter((c) => c && typeof c.url === 'string' && c.url.trim())
@@ -426,10 +460,13 @@ ipcMain.handle('config:set', (_e, patch) => {
 
 // from/to: 'YYYY-MM-DD' 문자열, force: 캐시 무시하고 새로 받기
 ipcMain.handle('events:get', async (_e, { from, to, force }) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error('날짜가 올바르지 않습니다');
   const [fy, fm, fd] = from.split('-').map(Number);
   const [ty, tm, td] = to.split('-').map(Number);
-  const fromDate = new Date(fy, fm - 1, fd, 0, 0, 0);
-  const toDate = new Date(ty, tm - 1, td, 23, 59, 59);
+  return collectEvents(new Date(fy, fm - 1, fd, 0, 0, 0), new Date(ty, tm - 1, td, 23, 59, 59), from, to, force);
+});
+
+async function collectEvents(fromDate, toDate, from, to, force) {
   const results = [];
   const errors = [];
   const FRESH_MS = 5 * 60 * 1000;
@@ -532,7 +569,151 @@ ipcMain.handle('events:get', async (_e, { from, to, force }) => {
   writeJson(cachePath(), cache);
 
   return { events: results, errors, updatedAt: Date.now() };
+}
+
+// ---------- 일정 검색 ----------
+// 3년 전부터 1년 뒤까지의 일정을 받아 두고(5분간 기억), 제목·장소·메모에서 찾기
+let searchPool = null; // { at, events, errors }
+let searchLoading = null;
+const SEARCH_BACK_YEARS = 3;
+const SEARCH_AHEAD_YEARS = 1;
+function searchRangeChunks() {
+  const now = new Date();
+  const chunks = [];
+  for (let y = now.getFullYear() - SEARCH_BACK_YEARS; y <= now.getFullYear() + SEARCH_AHEAD_YEARS; y++) {
+    for (const [m1, m2] of [[0, 5], [6, 11]]) {
+      chunks.push([new Date(y, m1, 1, 0, 0, 0), new Date(y, m2 + 1, 0, 23, 59, 59)]);
+    }
+  }
+  return chunks;
+}
+const keyOfDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+async function loadSearchPool(force) {
+  if (!force && searchPool && Date.now() - searchPool.at < 5 * 60 * 1000) return searchPool;
+  if (searchLoading) return searchLoading;
+  searchLoading = (async () => {
+    const seen = new Set();
+    const events = [];
+    const errors = [];
+    // 반년씩 나눠서 받기 (한 번에 너무 많이 요청하지 않도록)
+    for (const [a, b] of searchRangeChunks()) {
+      const res = await collectEvents(a, b, `s:${keyOfDate(a)}`, keyOfDate(b), false);
+      for (const ev of res.events) {
+        if (ev.holiday) continue;
+        const id = `${ev.calId}|${ev.uid}|${ev.startDay}|${ev.start || ''}`;
+        if (seen.has(id)) continue; // 반년 경계에 걸친 일정 중복 제거
+        seen.add(id);
+        events.push(ev);
+      }
+      for (const er of res.errors) if (!errors.some((x) => x.name === er.name)) errors.push(er);
+    }
+    searchPool = { at: Date.now(), events, errors };
+    return searchPool;
+  })().finally(() => { searchLoading = null; });
+  return searchLoading;
+}
+const norm = (s) => String(s || '').toLowerCase().normalize('NFC').replace(/\s+/g, ' ');
+ipcMain.handle('events:search', async (_e, { query, force }) => {
+  const q = norm(query).trim();
+  if (!q) return { results: [], errors: [], total: 0 };
+  const words = q.split(' ').filter(Boolean);
+  const pool = await loadSearchPool(!!force);
+  const hits = pool.events.filter((ev) => {
+    const hay = norm(`${ev.title} ${ev.location || ''} ${ev.notes || ''}`);
+    return words.every((w) => hay.includes(w));
+  });
+  // 날짜순 (최근 것이 위)
+  hits.sort((a, b) => (b.start || b.startDay).localeCompare(a.start || a.startDay));
+  return { results: hits.slice(0, 300), total: hits.length, errors: pool.errors, range: [SEARCH_BACK_YEARS, SEARCH_AHEAD_YEARS] };
 });
+// 검색창을 열 때 미리 받아 두기
+ipcMain.handle('events:search-warm', async () => { try { await loadSearchPool(false); } catch {} return true; });
+// 일정이 바뀌면 검색용 기억도 지우기
+const dropSearch = () => { searchPool = null; };
+
+// ---------- 월별 메모 ----------
+// 늘 이 PC에 먼저 저장 → 아이클라우드가 연결돼 있으면 아이클라우드에도 저장
+let memos = {}; // '2026-10' → { text, updatedAt, dirty }
+function saveMemos() { writeJson(memosPath(), memos); }
+const memoCloudOn = () => !!(config.icloud && config.memoSync !== false);
+const memoOut = (month, extra) => {
+  const m = memos[month] || { text: '', updatedAt: 0 };
+  return { text: m.text || '', updatedAt: m.updatedAt || 0, cloud: memoCloudOn(), synced: !m.dirty, ...extra };
+};
+
+ipcMain.handle('memo:get', (_e, month) => {
+  if (!memo.isMonthKey(month)) throw new Error('달이 올바르지 않습니다');
+  return memoOut(month);
+});
+
+async function pushMemo(month) {
+  const m = memos[month];
+  if (!m || !m.dirty || !memoCloudOn()) return;
+  if (!(await ensureIcloud())) return;
+  const sentAt = m.updatedAt;
+  await icloud.saveMemo(month, m.text, m.updatedAt);
+  // 보내는 사이에 또 고쳤으면 아직 '보낼 것'으로 남겨 둠
+  if (memos[month] && memos[month].updatedAt === sentAt) {
+    memos[month].dirty = false;
+    saveMemos();
+  }
+}
+
+// 아이클라우드와 맞추기: 더 최근에 고친 쪽이 이김
+ipcMain.handle('memo:sync', async (_e, month) => {
+  if (!memo.isMonthKey(month)) throw new Error('달이 올바르지 않습니다');
+  if (!memoCloudOn()) return memoOut(month, { synced: false });
+  try {
+    if (!(await ensureIcloud())) return memoOut(month, { synced: false, error: '아이클라우드에 연결되어 있지 않습니다' });
+    const local = memos[month];
+    const remote = await icloud.fetchMemo(month);
+    if (local && local.dirty && (!remote || local.updatedAt >= remote.updatedAt)) {
+      await pushMemo(month);
+    } else if (remote) {
+      if (!local || !local.dirty || remote.updatedAt > (local.updatedAt || 0)) {
+        if (!local || local.text !== remote.text || local.dirty) {
+          memos[month] = { text: remote.text, updatedAt: remote.updatedAt, dirty: false };
+          saveMemos();
+        }
+      }
+    } else if (local && !local.dirty && local.text) {
+      // 다른 기기에서 지운 메모
+      delete memos[month];
+      saveMemos();
+    }
+    return memoOut(month);
+  } catch (err) {
+    return memoOut(month, { synced: false, error: String((err && err.message) || err) });
+  }
+});
+
+ipcMain.handle('memo:set', async (_e, { month, text }) => {
+  if (!memo.isMonthKey(month)) throw new Error('달이 올바르지 않습니다');
+  text = String(text || '').slice(0, 20000);
+  memos[month] = { text, updatedAt: Date.now(), dirty: true };
+  if (!memoCloudOn()) {
+    memos[month].dirty = false;
+    if (!text) delete memos[month];
+  }
+  saveMemos();
+  if (!memoCloudOn()) return memoOut(month, { synced: false });
+  try {
+    await pushMemo(month);
+    return memoOut(month);
+  } catch (err) {
+    return memoOut(month, { synced: false, error: String((err && err.message) || err) });
+  }
+});
+
+// 아직 못 보낸 메모 보내기 (인터넷이 다시 연결됐을 때 등)
+async function flushMemos() {
+  if (!memoCloudOn()) return;
+  for (const month of Object.keys(memos)) {
+    if (memos[month] && memos[month].dirty) {
+      try { await pushMemo(month); } catch {}
+    }
+  }
+}
 
 ipcMain.handle('app:open-external', (_e, url) => {
   if (typeof url === 'string' && /^https:\/\//.test(url)) shell.openExternal(url);
@@ -668,6 +849,23 @@ ipcMain.handle('update:install', () => {
   return false;
 });
 
+// 맥: 메뉴 막대는 안 보이지만 ⌘C·⌘V·⌘A 같은 단축키가 되도록 메뉴를 정해 둠
+// (⌘W는 창을 닫는 대신 숨김 → 메뉴 막대 아이콘으로 다시 열기)
+function setMacMenu() {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    {
+      label: 'DeskCal',
+      submenu: [
+        { label: 'DeskCal 숨기기', accelerator: 'Command+W', click: () => win && win.hide() },
+        { label: '설정…', accelerator: 'Command+,', click: () => { if (win) { win.show(); win.webContents.send('open-settings'); } } },
+        { type: 'separator' },
+        { label: 'DeskCal 종료', accelerator: 'Command+Q', click: () => app.quit() },
+      ],
+    },
+    { role: 'editMenu', label: '편집' },
+  ]));
+}
+
 // ---------- 시작 ----------
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -677,12 +875,17 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.whenReady().then(() => {
     app.setAppUserModelId('com.deskcal.app');
+    // 맥: 독(Dock)에는 안 보이고 메뉴 막대 아이콘으로만 관리 (위젯처럼)
+    if (IS_MAC && app.dock) app.dock.hide();
     loadConfig();
+    if (IS_MAC) setMacMenu();
     makeShortcutsOnce();
     useAcrylic = acrylicSupported() && config.blur !== false;
     createWindow();
     rebuildTrayMenu = createTray();
     setupUpdater();
+    setInterval(flushMemos, 3 * 60 * 1000); // 못 보낸 메모가 있으면 3분마다 다시 시도
+    setTimeout(flushMemos, 20 * 1000);
     screen.on('display-removed', () => {
       if (win && !boundsAreVisible(win.getBounds())) win.center();
     });

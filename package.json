@@ -1,13 +1,15 @@
 {
   "name": "deskcal",
   "productName": "DeskCal",
-  "version": "0.7.0",
-  "description": "윈도우 바탕화면 달력 (아이클라우드·구글 캘린더 연동)",
+  "version": "0.8.0",
+  "description": "바탕화면 달력 — 윈도우·맥 (아이클라우드·구글 캘린더 연동, 월별 메모, 일정 검색)",
   "main": "src/main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win --x64 --publish never"
+    "test": "node test/run.js",
+    "dist": "electron-builder --win --x64 --publish never",
+    "dist:mac": "electron-builder --mac --arm64 --x64 --publish never"
   },
   "dependencies": {
     "electron-updater": "6.8.10",
@@ -27,6 +29,8 @@
     "files": [
       "src/**/*",
       "build/icon.png",
+      "build/trayTemplate.png",
+      "build/trayTemplate@2x.png",
       "package.json"
     ],
     "win": {
@@ -56,6 +60,38 @@
       "provider": "github",
       "owner": "gogoggog",
       "repo": "deskcal"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "artifactName": "DeskCal-Mac-${arch}.${ext}",
+      "extendInfo": {
+        "LSUIElement": true,
+        "NSHumanReadableCopyright": "DeskCal"
+      }
+    },
+    "dmg": {
+      "title": "DeskCal",
+      "artifactName": "DeskCal-Mac-${arch}.${ext}"
     }
   },
   "repository": {

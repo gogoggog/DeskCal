@@ -73,6 +73,7 @@ a { color: var(--blue); }
 .btn:hover { filter: brightness(1.06); }
 .btn:active { transform: scale(0.98); }
 .btn { text-decoration: none; }
+.btn.ghost { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
 .btn[aria-disabled="true"] { pointer-events: none; filter: saturate(0.3); opacity: 0.6; }
 .btn:focus-visible { outline: 3px solid var(--blue-soft); outline-offset: 3px; }
 .btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -142,25 +143,30 @@ footer { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; g
         <div class="tile" aria-hidden="true"><span class="dow" id="tileDow">월</span><span class="day" id="tileDay">19</span></div>
         <div>
           <div class="brand-name">DeskCal</div>
-          <div class="brand-sub">윈도우 바탕화면 달력</div>
+          <div class="brand-sub">윈도우 · 맥 바탕화면 달력</div>
         </div>
       </div>
       <h1>아이폰 일정을<br><em>바탕화면</em>에 띄워 두세요</h1>
-      <p class="lead">아이클라우드·구글 캘린더와 연결해 PC에서 일정을 보고, 더블클릭으로 바로 추가합니다. 추가한 일정은 휴대폰에도 그대로 들어갑니다.</p>
+      <p class="lead">아이클라우드·구글 캘린더와 연결해 PC에서 일정을 보고, 더블클릭으로 바로 추가합니다. 추가한 일정은 휴대폰에도 그대로 들어갑니다. 달력 아래엔 그달 메모, 지난 일정은 검색으로.</p>
 
       <div class="get">
         <a class="btn" id="dlBtn" href="#" target="_blank" rel="noopener" aria-disabled="true">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
           <span id="dlLabel">윈도우용 다운로드</span>
         </a>
+        <a class="btn ghost" href="https://github.com/gogoggog/deskcal/releases/latest/download/DeskCal-Mac-arm64.dmg" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>
+          <span>맥용 다운로드 (애플 실리콘)</span>
+        </a>
+        <p class="msg">인텔 맥은 <a href="https://github.com/gogoggog/deskcal/releases/latest/download/DeskCal-Mac-x64.dmg" target="_blank" rel="noopener">여기</a>에서 받으세요.</p>
         <p class="msg" id="msg">다운로드 링크를 준비하고 있습니다.</p>
         <p class="msg" id="altLink" hidden>설치 없이 쓰려면 <a href="https://github.com/gogoggog/deskcal/releases/latest/download/DeskCal-Windows.zip" target="_blank" rel="noopener">압축 파일 버전</a>을 받으세요.</p>
-        <div class="meta"><span>버전 <span class="mono">0.6.0</span></span><span>Windows 10 · 11 (64비트)</span><span>설치 프로그램 (exe)</span></div>
+        <div class="meta"><span>버전 <span class="mono">0.8.0</span></span><span>Windows 10 · 11 (64비트)</span><span>macOS 11 이상</span></div>
       </div>
     </div>
     <figure class="shots" style="margin:0">
-      <img class="shot light" src="shot-light.png" alt="DeskCal 월간 달력 화면 (라이트 모드)" width="920" height="673">
-      <img class="shot dark" src="shot-dark.png" alt="DeskCal 월간 달력 화면 (다크 모드, 음력 표시)" width="920" height="673">
+      <img class="shot light" src="shot-light.png" alt="DeskCal 월간 달력 화면 (라이트 모드)" width="900" height="733">
+      <img class="shot dark" src="shot-dark.png" alt="DeskCal 월간 달력 화면 (다크 모드)" width="900" height="733">
       <figcaption class="caption">예시 일정이 들어간 화면입니다</figcaption>
     </figure>
   </header>
@@ -168,13 +174,26 @@ footer { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; g
   <section class="section" aria-labelledby="install-h">
     <div>
       <div class="kicker">설치</div>
-      <h2 id="install-h">세 단계면 끝납니다</h2>
+      <h2 id="install-h">윈도우: 세 단계면 끝납니다</h2>
       <p class="side">설치 파일을 실행하면 알아서 설치되고 달력이 켜집니다.</p>
     </div>
     <ol class="steps">
       <li><div><h3>설치 파일 받기</h3><p>위의 <span class="ui">윈도우용 다운로드</span>를 누르면 <span class="ui">DeskCal-Setup.exe</span>가 다운로드 폴더에 저장됩니다.</p></div></li>
       <li><div><h3>설치 파일 실행</h3><p><span class="ui">DeskCal-Setup.exe</span>를 더블클릭합니다. 파란 <span class="ui">Windows의 PC 보호</span> 창이 뜨면 <span class="ui">추가 정보</span> → <span class="ui">실행</span>을 누르세요. 설치가 끝나면 달력이 켜지고 바탕화면에 바로가기가 생깁니다.</p></div></li>
       <li><div><h3>캘린더 연결</h3><p>달력 오른쪽 위 톱니바퀴를 눌러 아이클라우드 계정을 연결합니다. 연결하는 방법은 바로 아래에 있습니다.</p></div></li>
+    </ol>
+  </section>
+
+  <section class="section" aria-labelledby="mac-h">
+    <div>
+      <div class="kicker">맥 설치</div>
+      <h2 id="mac-h">맥: 끌어 넣고, 한 번 허락</h2>
+      <p class="side">개발자 등록을 하지 않은 개인 프로그램이라 처음 한 번만 허락이 필요합니다.</p>
+    </div>
+    <ol class="steps">
+      <li><div><h3>dmg 열기</h3><p><span class="ui">맥용 다운로드</span>로 받은 <span class="ui">DeskCal-Mac-arm64.dmg</span>를 열고, DeskCal 아이콘을 <span class="ui">응용 프로그램</span> 폴더로 끌어 넣습니다.</p></div></li>
+      <li><div><h3>처음 열기 허락</h3><p>DeskCal을 열었을 때 '확인할 수 없음' 창이 뜨면 <span class="ui">완료</span>를 누르고, <span class="ui">시스템 설정</span> → <span class="ui">개인정보 보호 및 보안</span> 맨 아래 <span class="ui">그래도 열기</span>를 누릅니다.</p></div></li>
+      <li><div><h3>메뉴 막대 아이콘</h3><p>달력은 바탕화면에 뜨고 Dock에는 나타나지 않습니다. 숨기기·설정·종료는 화면 맨 위 메뉴 막대의 달력 아이콘에서 합니다.</p></div></li>
     </ol>
   </section>
 
@@ -197,6 +216,8 @@ footer { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; g
       <h2 id="feat-h">할 수 있는 것</h2>
     </div>
     <div class="features">
+      <div class="feat" style="--c:#8e8e93"><h3><span class="dot"></span>달력 아래 월별 메모</h3><p>그달 메모를 적으면 바로 저장됩니다. 아이클라우드를 연결하면 윈도우와 맥에서 같은 메모를 보고, 아이폰 캘린더에도 매달 1일에 '📝 메모'로 보입니다.</p></div>
+      <div class="feat" style="--c:#5ac8fa"><h3><span class="dot"></span>일정 검색</h3><p>돋보기 또는 Ctrl+F(맥은 ⌘F). 3년 전부터 1년 뒤까지 제목·장소·메모에서 찾고, 누르면 그 날짜로 갑니다.</p></div>
       <div class="feat" style="--c:#ff3b30"><h3><span class="dot"></span>공휴일 · 24절기 · 음력</h3><p>대한민국 공휴일이 기본으로 들어 있고, 한로·상강 같은 절기와 음력 날짜도 날짜 칸에 표시합니다.</p></div>
       <div class="feat" style="--c:#0a84ff"><h3><span class="dot"></span>더블클릭으로 일정 추가</h3><p>날짜를 더블클릭하면 입력 창이 열립니다. 하루 종일, 여러 날짜, 알림, 메모까지 넣을 수 있습니다.</p></div>
       <div class="feat" style="--c:#34c759"><h3><span class="dot"></span>구글 캘린더도 함께</h3><p>톱니바퀴 → 구글 → 구글 계정으로 로그인. 아이클라우드와 구글 일정을 한 달력에서 봅니다. 처음에 '확인되지 않은 앱' 화면이 나오면 고급 → DeskCal(으)로 이동을 누르세요.</p></div>
@@ -226,8 +247,8 @@ footer { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; g
   <footer>
     <a href="privacy.html">개인정보 처리방침</a>
     <a href="https://github.com/gogoggog/deskcal">GitHub</a>
-    <span>DeskCal <span class="mono">0.6.0</span></span>
-    <span>윈도우 10 · 11 (64비트)</span>
+    <span>DeskCal <span class="mono">0.8.0</span></span>
+    <span>윈도우 10 · 11 (64비트) · macOS</span>
     <span>아이클라우드 · 구글 캘린더 · 대한민국 공휴일</span>
   </footer>
 </div>

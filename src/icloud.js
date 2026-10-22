@@ -2,6 +2,7 @@
 // 애플이 제공하는 표준 방식(CalDAV)으로 연결하며, 애플 계정의 '앱 전용 암호'를 사용합니다.
 const crypto = require('crypto');
 const { extractEvents } = require('./calendar');
+const memo = require('./memo');
 
 const ICLOUD_URL = 'https://caldav.icloud.com';
 
@@ -9,6 +10,8 @@ let tsdav; // 처음 쓸 때 불러옴
 let client = null;
 let calMap = new Map(); // 캘린더 주소 → 캘린더 정보
 let connectedAs = null;
+let memoCal = null; // 'DeskCal 메모' 캘린더 (일정 목록에는 넣지 않음)
+let homeUrl = ''; // 캘린더들이 들어 있는 상위 주소
 const rawMap = new Map(); // 일정 주소 → 원본 내용 (수정할 때 다른 정보를 보존하기 위함)
 
 // 애플 서버끼리 연결을 넘길 때(리디렉트) 로그인 정보가 빠지지 않도록 직접 따라가는 함수
@@ -82,6 +85,9 @@ async function connect(appleId, password, serverUrl = ICLOUD_URL) {
     throw friendly(e);
   }
   cals = (cals || []).filter((cal) => !cal.components || cal.components.includes('VEVENT'));
+  homeUrl = homeOf(cals);
+  memoCal = cals.find(isMemoCal) || null;
+  cals = cals.filter((cal) => !isMemoCal(cal));
   if (!cals.length) {
     throw new Error(`로그인하지 못했거나 캘린더가 없습니다. 애플 ID와 앱 전용 암호를 다시 확인해 주세요.${trail.length ? ` [진단: ${trail.join(' → ')}]` : ''}`);
   }
@@ -93,6 +99,21 @@ async function connect(appleId, password, serverUrl = ICLOUD_URL) {
     name: textOf(cal.displayName) || '캘린더',
     color: cleanColor(cal.calendarColor),
   }));
+}
+
+// 메모 캘린더인지 (주소 끝이 deskcal-memo/ 이거나 이름이 'DeskCal 메모')
+function isMemoCal(cal) {
+  if (!cal) return false;
+  const url = String(cal.url || '');
+  return url.replace(/\/+$/, '').endsWith(`/${memo.MEMO_CAL_SLUG}`) || textOf(cal.displayName).trim() === memo.MEMO_CAL_NAME;
+}
+// https://pXX-caldav.icloud.com/1234/calendars/<캘린더>/ → https://pXX-caldav.icloud.com/1234/calendars/
+function homeOf(cals) {
+  for (const c of cals || []) {
+    const m = String(c.url || '').match(/^(https:\/\/[^/]+\/.*?\/calendars\/)/);
+    if (m) return m[1];
+  }
+  return '';
 }
 
 function friendly(e) {
@@ -111,6 +132,9 @@ function disconnect() {
   client = null;
   connectedAs = null;
   calMap = new Map();
+  memoCal = null;
+  homeUrl = '';
+  memoObjs.clear();
 }
 
 // 기간 안의 일정 가져오기
@@ -317,4 +341,102 @@ async function deleteEvent(objUrl, etag) {
   if (res && res.ok === false && res.status !== 404) throw new Error(`삭제하지 못했습니다 (${res.status})`);
 }
 
-module.exports = { _icloudFetch: icloudFetch, patchIcs, updateEvent, connect, disconnect, isConnected, fetchEvents, createEvent, deleteEvent, buildIcs, connectedAs: () => connectedAs };
+// ---------- 월별 메모 ----------
+const memoObjs = new Map(); // '2026-10' → { url, etag }
+
+// 메모 캘린더가 없으면 하나 만들기 (처음 메모를 저장할 때 한 번)
+async function ensureMemoCal() {
+  if (!client) throw new Error('아이클라우드에 연결되어 있지 않습니다');
+  if (memoCal) return memoCal;
+  if (!homeUrl) throw new Error('메모 캘린더를 만들 위치를 찾지 못했습니다');
+  const url = `${homeUrl}${memo.MEMO_CAL_SLUG}/`;
+  let res;
+  try {
+    res = await client.makeCalendar({
+      url,
+      props: {
+        'd:displayname': memo.MEMO_CAL_NAME,
+        'ca:calendar-color': '#8e8e93',
+        'c:supported-calendar-component-set': { 'c:comp': { _attributes: { name: 'VEVENT' } } },
+      },
+    });
+  } catch (e) {
+    throw friendly(e);
+  }
+  const r = Array.isArray(res) ? res[0] : res;
+  const status = r && (r.status || (r.raw && r.raw.status));
+  // 405 = 이미 있음 (다른 PC에서 먼저 만든 경우)
+  if (status && status >= 400 && status !== 405) throw new Error(`메모 캘린더를 만들지 못했습니다 (${status})`);
+  const all = await client.fetchCalendars();
+  memoCal = (all || []).find(isMemoCal) || null;
+  if (!memoCal) throw new Error('메모 캘린더를 만들지 못했습니다');
+  return memoCal;
+}
+
+function monthRange(month) {
+  const [y, m] = month.split('-').map(Number);
+  return { start: new Date(Date.UTC(y, m - 1, 1) - 36 * 3600e3), end: new Date(Date.UTC(y, m - 1, 2) + 36 * 3600e3) };
+}
+
+// 그달 메모 가져오기 → { text, updatedAt } 또는 null (아직 없음)
+async function fetchMemo(month) {
+  if (!client) throw new Error('아이클라우드에 연결되어 있지 않습니다');
+  if (!memo.isMonthKey(month)) throw new Error('달이 올바르지 않습니다');
+  if (!memoCal) return null; // 메모 캘린더가 아직 없으면 메모도 없음
+  const { start, end } = monthRange(month);
+  let objects;
+  try {
+    objects = await client.fetchCalendarObjects({ calendar: memoCal, timeRange: { start: start.toISOString(), end: end.toISOString() } });
+  } catch (e) {
+    throw friendly(e);
+  }
+  let found = null;
+  for (const obj of objects || []) {
+    const p = obj && obj.data ? memo.parseMemoIcs(obj.data) : null;
+    if (!p || p.month !== month) continue;
+    if (!found || p.updatedAt > found.updatedAt) found = { ...p, url: obj.url, etag: obj.etag || '' };
+  }
+  if (found) memoObjs.set(month, { url: found.url, etag: found.etag });
+  else memoObjs.delete(month);
+  return found ? { text: found.text, updatedAt: found.updatedAt } : null;
+}
+
+// 그달 메모 저장 (빈 메모면 지움)
+async function saveMemo(month, text, updatedAt) {
+  if (!memo.isMonthKey(month)) throw new Error('달이 올바르지 않습니다');
+  const empty = !String(text || '').trim();
+  if (empty && !memoCal) return;
+  const cal = await ensureMemoCal();
+  if (!memoObjs.has(month)) await fetchMemo(month);
+  const attempt = async () => {
+    const known = memoObjs.get(month);
+    if (empty) {
+      if (!known) return { ok: true };
+      const res = await client.deleteCalendarObject({ calendarObject: { url: known.url, etag: known.etag } });
+      if (res && res.ok === false && res.status !== 404) return res;
+      memoObjs.delete(month);
+      return { ok: true };
+    }
+    const data = memo.buildMemoIcs(month, text, updatedAt);
+    if (known) return client.updateCalendarObject({ calendarObject: { url: known.url, data, etag: known.etag } });
+    return client.createCalendarObject({ calendar: cal, filename: memo.memoFileName(month), iCalString: data });
+  };
+  let res = await attempt();
+  if (res && res.status === 412) {
+    // 그사이 다른 기기에서 바뀌었으면 최신 정보를 받아서 한 번 더 (지금 쓰는 내용이 이김)
+    await fetchMemo(month);
+    res = await attempt();
+  }
+  if (res && res.ok === false) throw new Error(`메모를 아이클라우드에 저장하지 못했습니다 (${res.status})`);
+  if (!empty) {
+    const etag = (res && res.headers && typeof res.headers.get === 'function' && res.headers.get('etag')) || '';
+    const prev = memoObjs.get(month);
+    const url = prev ? prev.url : `${cal.url}${memo.memoFileName(month)}`;
+    memoObjs.set(month, { url, etag });
+    if (!etag) memoObjs.delete(month); // etag를 모르면 다음 저장 전에 새로 확인
+  }
+}
+
+module.exports = {
+  fetchMemo,
+  saveMemo, _icloudFetch: icloudFetch, patchIcs, updateEvent, connect, disconnect, isConnected, fetchEvents, createEvent, deleteEvent, buildIcs, connectedAs: () => connectedAs };

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>com.deskcal.app.eventkit</string>
+  <key>CFBundleName</key><string>DeskCal</string>
+  <key>NSCalendarsUsageDescription</key><string>DeskCal이 맥 캘린더의 일정을 바탕화면 달력에 보여 주고, 새 일정과 월별 메모를 저장합니다.</string>
+  <key>NSCalendarsFullAccessUsageDescription</key><string>DeskCal이 맥 캘린더의 일정을 바탕화면 달력에 보여 주고, 새 일정과 월별 메모를 저장합니다.</string>
+</dict>
+</plist>

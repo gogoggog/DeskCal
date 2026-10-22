@@ -1,0 +1,18 @@
+# 맥 캘린더 도우미가 빌드되는지만 확인 (배포 안 함)
+name: 맥 캘린더 도우미 확인
+on:
+  push:
+    branches: ['mac-*']
+    paths: ['build/mac/**', '.github/workflows/mac-helper-check.yml']
+  workflow_dispatch:
+jobs:
+  helper:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 도우미 빌드
+        run: bash build/mac/build-helper.sh
+      - name: 상태 확인 (CI에는 허용이 없으니 notDetermined/denied 가 정상)
+        run: |
+          build/mac/deskcal-eventkit --status
+          printf '{"id":1,"cmd":"ping"}\n{"id":2,"cmd":"status"}\n{"id":3,"cmd":"calendars"}\nnot json\n{"id":4,"cmd":"memoGet","month":"2026-13"}\n' | build/mac/deskcal-eventkit

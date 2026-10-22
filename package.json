@@ -1,7 +1,7 @@
 {
   "name": "deskcal",
   "productName": "DeskCal",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "바탕화면 달력 — 윈도우·맥 (아이클라우드·구글 캘린더 연동, 월별 메모, 일정 검색)",
   "main": "src/main.js",
   "private": true,

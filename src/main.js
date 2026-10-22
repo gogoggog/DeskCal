@@ -6,6 +6,7 @@ const { downloadIcs, extractEvents, normalizeUrl } = require('./calendar');
 const icloud = require('./icloud');
 const google = require('./google');
 const memo = require('./memo');
+const localSecret = require('./localsecret');
 const os = require('os');
 
 const IS_MAC = process.platform === 'darwin';
@@ -241,13 +242,21 @@ function publicConfig() {
 }
 
 // ---------- 아이클라우드 ----------
-// 암호는 윈도우 계정 잠금(DPAPI)으로 암호화해서 이 PC에만 저장
+// 암호 저장
+// - 윈도우: 윈도우 계정 잠금(DPAPI)으로 암호화해서 이 PC에만 저장
+// - 맥: 키체인 대신 설정 폴더의 열쇠 파일(이 계정만 읽기 가능)로 암호화 — 업데이트해도 연동 유지
 function encryptPw(pw) {
+  if (IS_MAC) return localSecret.encrypt(dataDir(), pw);
   if (!safeStorage.isEncryptionAvailable()) throw new Error('이 PC에서는 암호를 안전하게 저장할 수 없습니다');
   return safeStorage.encryptString(pw).toString('base64');
 }
 function decryptPw(enc) {
-  return safeStorage.decryptString(Buffer.from(enc, 'base64'));
+  if (localSecret.isLocal(enc)) return localSecret.decrypt(dataDir(), enc);
+  try {
+    return safeStorage.decryptString(Buffer.from(enc, 'base64'));
+  } catch {
+    throw new Error('저장된 암호를 읽지 못했습니다. 설정에서 연동을 다시 해 주세요');
+  }
 }
 
 let icloudConnecting = null;

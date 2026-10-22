@@ -151,5 +151,27 @@ function loadIcloudWith(server) {
     assert.strictEqual((await icloud.fetchMemo('2026-12')).text, '12월');
   });
 
+  // ---------- 맥용 암호 보관 (열쇠 파일) ----------
+  const localSecret = require('../src/localsecret');
+  const fs = require('fs');
+  const os = require('os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deskcal-secret-'));
+  await check('맥 암호: 저장한 암호를 그대로 다시 읽음', async () => {
+    const enc = localSecret.encrypt(dir, 'abcd-efgh-ijkl-mnop');
+    assert(localSecret.isLocal(enc));
+    assert(!enc.includes('abcd'));
+    assert.strictEqual(localSecret.decrypt(dir, enc), 'abcd-efgh-ijkl-mnop');
+  });
+  await check('맥 암호: 열쇠 파일은 내 계정만 읽기 가능', async () => {
+    if (process.platform === 'win32') return;
+    assert.strictEqual(fs.statSync(path.join(dir, 'secret.key')).mode & 0o777, 0o600);
+  });
+  await check('맥 암호: 같은 열쇠로 계속 읽힘(업데이트 후에도)', async () => {
+    const enc = localSecret.encrypt(dir, '두번째');
+    assert.strictEqual(localSecret.decrypt(dir, enc), '두번째');
+    assert(!localSecret.isLocal('예전키체인방식base64'));
+  });
+  fs.rmSync(dir, { recursive: true, force: true });
+
   console.log(`\n${passed}개 통과${process.exitCode ? ' · 실패 있음' : ''}`);
 })();

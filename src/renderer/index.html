@@ -58,7 +58,7 @@
         <span class="memo-title" id="memoTitle">메모</span>
         <span class="memo-state" id="memoState"></span>
       </div>
-      <textarea class="memo-text" id="memoText" placeholder="이달에 기억할 것을 적어 두세요" spellcheck="false" maxlength="20000"></textarea>
+      <textarea class="memo-text" id="memoText" rows="1" placeholder="이달에 기억할 것을 한 줄로 적어 두세요" spellcheck="false" maxlength="20000"></textarea>
     </section>
 
     <!-- 일정 검색 -->
@@ -141,6 +141,11 @@
         <div class="row"><span>모양</span>
           <div class="segmented" id="themeSeg">
             <button data-v="auto">자동</button><button data-v="light">라이트</button><button data-v="dark">다크</button>
+          </div>
+        </div>
+        <div class="row"><span>디자인</span>
+          <div class="segmented" id="styleSeg">
+            <button data-v="glass">물방울 유리</button><button data-v="basic">기본</button>
           </div>
         </div>
         <div class="row"><span>한 주의 시작</span>

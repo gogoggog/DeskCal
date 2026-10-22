@@ -37,6 +37,7 @@
     const t = config.theme || 'auto';
     document.body.dataset.theme = t === 'auto' ? (darkMQ.matches ? 'dark' : 'light') : t;
     document.body.classList.toggle('blur', !!config.blurActive);
+    document.body.classList.toggle('glass', config.style !== 'basic');
   }
   darkMQ.addEventListener('change', () => config && applyTheme());
 
@@ -1047,6 +1048,7 @@
     applyTheme();
     setSeg('themeSeg', config.theme || 'auto');
     setSeg('weekSeg', config.weekStart || 0);
+    setSeg('styleSeg', config.style === 'basic' ? 'basic' : 'glass');
     $('showTerms').checked = config.showTerms !== false;
     $('showLunar').checked = !!config.showLunar;
     $('opacity').value = config.opacity;
@@ -1188,7 +1190,10 @@
   function applyMemoLayout() {
     const on = config.showMemo !== false;
     $('memoBox').classList.toggle('hidden', !on);
-    document.querySelector('.frame').style.setProperty('--memo-h', `${on ? Number(config.memoHeight) || 120 : 0}px`);
+    const h = Number(config.memoHeight) || 40;
+    document.querySelector('.frame').style.setProperty('--memo-h', `${on ? h : 0}px`);
+    // 낮으면 한 줄 모양 (제목 · 메모 · 저장 상태가 한 줄에)
+    $('memoBox').classList.toggle('compact', h < 70);
   }
 
   async function flushMemo() {
@@ -1248,6 +1253,8 @@
     ta.addEventListener('blur', () => { if (memoTimer) flushMemo(); });
     ta.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.stopPropagation(); ta.blur(); }
+      // 한 줄 모양일 때 Enter는 줄바꿈 대신 저장하고 마치기 (Shift+Enter는 줄바꿈)
+      else if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && $('memoBox').classList.contains('compact')) { e.preventDefault(); ta.blur(); }
     });
     window.addEventListener('beforeunload', () => { if (memoTimer) flushMemo(); });
 
@@ -1257,13 +1264,13 @@
     split.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       split.setPointerCapture(e.pointerId);
-      drag = { y: e.clientY, h: Number(config.memoHeight) || 120 };
+      drag = { y: e.clientY, h: Number(config.memoHeight) || 40 };
       split.classList.add('on');
     });
     split.addEventListener('pointermove', (e) => {
       if (!drag) return;
       const max = Math.max(80, document.querySelector('.frame').clientHeight - 230);
-      const h = Math.round(Math.min(max, Math.max(60, drag.h - (e.clientY - drag.y))));
+      const h = Math.round(Math.min(max, Math.max(36, drag.h - (e.clientY - drag.y))));
       config.memoHeight = h;
       applyMemoLayout();
     });
@@ -1275,7 +1282,8 @@
     };
     split.addEventListener('pointerup', end);
     split.addEventListener('pointercancel', end);
-    split.addEventListener('dblclick', () => { config.memoHeight = 120; applyMemoLayout(); saveConfig({ memoHeight: 120 }); });
+    // 두 번 누르면 한 줄 ↔ 넓게
+    split.addEventListener('dblclick', () => { const h = (Number(config.memoHeight) || 40) < 70 ? 130 : 40; config.memoHeight = h; applyMemoLayout(); saveConfig({ memoHeight: h }); });
 
     // 2분마다, 그리고 창으로 돌아왔을 때 다른 기기 메모 받아 오기
     setInterval(() => { if (document.activeElement !== ta) syncMemo(); }, 2 * 60 * 1000);
@@ -1530,6 +1538,12 @@
     $('showTerms').onchange = (e) => saveConfig({ showTerms: e.target.checked }).then(renderAll);
     $('showLunar').onchange = (e) => saveConfig({ showLunar: e.target.checked }).then(renderAll);
     $('showMemo').onchange = (e) => saveConfig({ showMemo: e.target.checked });
+    document.querySelectorAll('#styleSeg button').forEach((b) => (b.onclick = async () => {
+      const glass = b.dataset.v === 'glass';
+      const needBlur = glass && config.blurAvailable && !config.blurActive;
+      await saveConfig({ style: b.dataset.v, ...(needBlur ? { blur: true } : {}) });
+      if (needBlur) api.relaunch(); // 바탕이 비치는 효과는 다시 켜야 적용됨
+    }));
     $('memoSync').onchange = (e) => saveConfig({ memoSync: e.target.checked });
     $('opacity').oninput = (e) => saveConfig({ opacity: Number(e.target.value) });
     $('alwaysOnTop').onchange = (e) => saveConfig({ alwaysOnTop: e.target.checked });

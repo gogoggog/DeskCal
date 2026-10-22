@@ -33,7 +33,8 @@ const DEFAULT_CONFIG = {
   showTerms: true,
   showLunar: false,
   eventColors: {},
-  uiVersion: 3,
+  uiVersion: 4,
+  style: 'glass', // 'glass' = 물방울 유리(리퀴드 글래스), 'basic' = 기본
   weekStart: 0, // 0 = 일요일 시작, 1 = 월요일 시작
   bounds: null,
   // 아이클라우드 계정: { appleId, passwordEnc, calendars:[{url,name,color,enabled}], defaultCal }
@@ -44,7 +45,7 @@ const DEFAULT_CONFIG = {
   defaultCal: '',
   // 달력 아래 메모칸
   showMemo: true,
-  memoHeight: 120, // 메모칸 높이(px)
+  memoHeight: 40, // 메모칸 높이(px) — 기본은 한 줄
   memoSync: true, // 아이클라우드가 연결돼 있으면 메모도 아이클라우드에 저장
 };
 
@@ -83,6 +84,14 @@ function loadConfig() {
     if ((saved.uiVersion || 1) < 2) config.bounds = null;
     config.opacity = 1;
     config.uiVersion = 3;
+    writeJson(configPath(), config);
+  }
+  // 0.9: 물방울 유리 디자인을 켜고, 메모칸은 한 줄로
+  if ((saved.uiVersion || 1) < 4) {
+    config.style = 'glass';
+    config.blur = true;
+    config.memoHeight = 40;
+    config.uiVersion = 4;
     writeJson(configPath(), config);
   }
   if (!Array.isArray(config.calendars)) config.calendars = DEFAULT_CONFIG.calendars;
@@ -438,11 +447,12 @@ const icCache = new Map(); // 같은 달을 자주 다시 불러오지 않도록
 ipcMain.handle('config:get', () => publicConfig());
 
 ipcMain.handle('config:set', (_e, patch) => {
-  const allowed = ['calendars', 'alwaysOnTop', 'autoStart', 'opacity', 'theme', 'weekStart', 'showTerms', 'showLunar', 'blur', 'showMemo', 'memoHeight', 'memoSync'];
+  const allowed = ['calendars', 'alwaysOnTop', 'autoStart', 'opacity', 'theme', 'weekStart', 'showTerms', 'showLunar', 'blur', 'showMemo', 'memoHeight', 'memoSync', 'style'];
   const clean = {};
   for (const k of allowed) if (k in (patch || {})) clean[k] = patch[k];
-  if ('memoHeight' in clean) clean.memoHeight = Math.round(Math.min(600, Math.max(60, Number(clean.memoHeight) || 120)));
+  if ('memoHeight' in clean) clean.memoHeight = Math.round(Math.min(600, Math.max(36, Number(clean.memoHeight) || 40)));
   for (const k of ['showMemo', 'memoSync']) if (k in clean) clean[k] = !!clean[k];
+  if ('style' in clean) clean.style = clean.style === 'basic' ? 'basic' : 'glass';
   if (clean.calendars) {
     clean.calendars = clean.calendars
       .filter((c) => c && typeof c.url === 'string' && c.url.trim())

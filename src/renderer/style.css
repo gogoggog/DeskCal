@@ -448,3 +448,156 @@ select option { background: var(--card); color: var(--text); }
 
 /* 맥: 시스템 글꼴 */
 body.mac { --font: -apple-system, "SF Pro Text", "Apple SD Gothic Neo", sans-serif; --font-num: -apple-system, "SF Pro Display", "Apple SD Gothic Neo", sans-serif; }
+
+/* ---------- 메모칸: 한 줄 모양 ---------- */
+.memo.compact { flex-direction: row; align-items: center; gap: 10px; padding: 0 16px 0 20px; }
+.memo.compact .memo-head { display: contents; }
+.memo.compact .memo-title { flex: none; order: 0; }
+.memo.compact .memo-text {
+  order: 1; flex: 1; min-width: 0; height: 26px; padding: 3px 10px; line-height: 20px;
+  white-space: nowrap; overflow: hidden; border-radius: 8px;
+}
+.memo.compact .memo-text:focus { white-space: pre-wrap; overflow-y: auto; }
+.memo.compact .memo-state { order: 2; flex: none; max-width: 34%; }
+.memo.compact .memo-state:not(.err) { font-size: 0; }           /* 한 줄일 땐 글자 대신 */
+.memo.compact .memo-state.ok::before { font-size: 13px; content: "☁︎"; }  /* 구름 표시만 */
+.memo.compact .memo-state.err { font-size: 11px; }
+
+/* ---------- 물방울 유리 (리퀴드 글래스) ---------- */
+body.glass[data-theme="light"] {
+  --glass: rgba(255, 255, 255, 0.52);
+  --glass-strong: rgba(255, 255, 255, 0.72);
+  --glass-edge: rgba(255, 255, 255, 0.95);
+  --glass-rim: rgba(255, 255, 255, 0.55);
+  --glass-shade: rgba(0, 0, 0, 0.06);
+  --glass-tint1: rgba(120, 180, 255, 0.16);
+  --glass-tint2: rgba(255, 170, 210, 0.12);
+  --hair: rgba(0, 0, 0, 0.07);
+  --weekend: rgba(255, 255, 255, 0.18);
+  --hover: rgba(255, 255, 255, 0.45);
+  --sel: rgba(10, 132, 255, 0.12);
+  --pop: rgba(255, 255, 255, 0.78);
+  --sheet: rgba(242, 242, 247, 0.86);
+  --card: rgba(255, 255, 255, 0.72);
+}
+body.glass[data-theme="dark"] {
+  --glass: rgba(40, 40, 46, 0.48);
+  --glass-strong: rgba(58, 58, 64, 0.62);
+  --glass-edge: rgba(255, 255, 255, 0.32);
+  --glass-rim: rgba(255, 255, 255, 0.14);
+  --glass-shade: rgba(0, 0, 0, 0.25);
+  --glass-tint1: rgba(90, 150, 255, 0.14);
+  --glass-tint2: rgba(200, 110, 255, 0.10);
+  --hair: rgba(255, 255, 255, 0.08);
+  --weekend: rgba(255, 255, 255, 0.03);
+  --hover: rgba(255, 255, 255, 0.07);
+  --sel: rgba(10, 132, 255, 0.2);
+  --pop: rgba(44, 44, 50, 0.8);
+  --sheet: rgba(28, 28, 32, 0.86);
+  --card: rgba(58, 58, 64, 0.7);
+}
+
+/* 창 전체: 바탕이 비치는 유리판 + 빛이 맺힌 가장자리 */
+body.glass .frame {
+  background:
+    radial-gradient(120% 70% at 0% 0%, var(--glass-tint1), transparent 60%),
+    radial-gradient(90% 60% at 100% 100%, var(--glass-tint2), transparent 65%),
+    var(--glass);
+  border: 0; border-radius: 22px;
+  box-shadow:
+    inset 0 1px 0 var(--glass-edge),
+    inset 0 0 0 1px var(--glass-rim),
+    inset 0 -14px 28px -18px var(--glass-shade);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+}
+/* 위쪽에 맺힌 빛 (물방울 하이라이트) */
+body.glass .frame::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 90px; pointer-events: none; z-index: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent);
+  border-radius: 22px 22px 0 0; opacity: 0.8;
+}
+body.glass[data-theme="dark"] .frame::before { opacity: 0.25; }
+body.glass .frame > * { position: relative; z-index: 1; }
+body.glass .frame > .status { position: absolute; }
+body.glass .frame > .search { position: absolute; z-index: 15; }
+/* 윈도우 11·맥에서 바탕 흐림이 켜져 있으면 창 자체가 이미 흐리게 비치므로 더 투명하게 */
+body.glass.blur .frame { border-radius: 0; }
+body.glass.blur .frame::before { border-radius: 0; }
+body.glass.mac.blur .frame, body.glass.mac.blur .frame::before { border-radius: 12px; }
+
+/* 칸 구분선은 더 옅게 */
+body.glass .cell { border-color: var(--hair); }
+body.glass .weekdays { border-bottom-color: var(--hair); }
+
+/* 오늘: 볼록한 빨간 물방울 */
+body.glass .cell.today .num {
+  background: radial-gradient(120% 120% at 30% 20%, #ff7a70, var(--red) 55%, #d92b20);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.6), inset 0 -2px 3px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(255, 59, 48, 0.35);
+}
+/* 선택한 날: 은은한 유리 */
+body.glass .cell.selected { background: var(--sel); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 22%, transparent); }
+
+/* 버튼 묶음: 유리 알약 */
+body.glass .nav, body.glass .segmented, body.glass .search-bar input, body.glass .dt input, body.glass select {
+  background: var(--glass-strong);
+  box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 0.5px var(--glass-rim), 0 1px 3px var(--glass-shade);
+}
+body.glass .nb:hover, body.glass .segmented button.on {
+  background: var(--glass-edge);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+body.glass[data-theme="dark"] .nb:hover, body.glass[data-theme="dark"] .segmented button.on { background: rgba(255, 255, 255, 0.18); }
+body.glass .tb { border-radius: 50%; width: 30px; height: 30px; }
+body.glass .tb:hover {
+  background: var(--glass-strong);
+  box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 0.5px var(--glass-rim), 0 1px 3px var(--glass-shade);
+}
+
+/* 하루 종일 일정: 젤리 같은 유리 띠 */
+body.glass .chip.allday {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c) 30%, rgba(255,255,255,0.35)), color-mix(in srgb, var(--c) 18%, transparent));
+  box-shadow: inset 3px 0 0 var(--c), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+body.glass .chip.allday.cont { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45); }
+body.glass .chip .dot { box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.55), 0 0 0 0.5px rgba(0, 0, 0, 0.08); }
+body.glass .chip.active, body.glass .chip.active:hover { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 2px 6px color-mix(in srgb, var(--c) 40%, transparent); }
+
+/* 떠 있는 창들(일정 보기·검색·설정·입력): 두꺼운 유리 */
+body.glass .pop, body.glass .search, body.glass .composer, body.glass .arrange-box {
+  background: var(--pop);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(30px) saturate(180%);
+  box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 1px var(--glass-rim), 0 18px 50px rgba(0, 0, 0, 0.22);
+  border-radius: 18px;
+}
+body.glass .sheet {
+  background: var(--sheet);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  backdrop-filter: blur(30px) saturate(180%);
+  box-shadow: inset 1px 0 0 var(--glass-rim), -12px 0 40px rgba(0, 0, 0, 0.15);
+}
+body.glass .sheet-head { background: transparent; -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+body.glass .group { background: var(--card); box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 0.5px var(--glass-rim); border-radius: 14px; }
+body.glass .overlay { background: rgba(0, 0, 0, 0.08); }
+body.glass .btn.primary {
+  background: linear-gradient(180deg, #3d9bff, var(--blue));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 2px 6px rgba(10, 132, 255, 0.3);
+}
+
+/* 메모칸: 아래에 떠 있는 유리 막대 */
+body.glass .memo { background: transparent; border-top-color: var(--hair); }
+body.glass .memo-text:focus { background: var(--glass-strong); box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 0.5px var(--glass-rim); }
+body.glass .memo.compact .memo-text { background: rgba(255, 255, 255, 0.0); }
+body.glass .memo.compact .memo-text:hover { background: var(--hover); }
+body.glass .memo.compact .memo-text:focus { background: var(--glass-strong); }
+
+@media (prefers-reduced-transparency: reduce) {
+  body.glass .frame { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+/* 선택한 날·마우스 올린 칸: 탁해 보이지 않게 투명한 파랑/흰 유리로 */
+body.glass[data-theme="light"] { --sel: rgba(255, 255, 255, 0.38); --hover: rgba(255, 255, 255, 0.22); }
+body.glass[data-theme="dark"] { --sel: rgba(120, 170, 255, 0.14); }
+body.glass .cell.selected {
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--blue) 45%, transparent), inset 0 1px 0 var(--glass-edge);
+}

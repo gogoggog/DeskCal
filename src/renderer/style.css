@@ -601,3 +601,7 @@ body.glass[data-theme="dark"] { --sel: rgba(120, 170, 255, 0.14); }
 body.glass .cell.selected {
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--blue) 45%, transparent), inset 0 1px 0 var(--glass-edge);
 }
+/* 떠 있는 창(설정·입력·검색·일정 보기)은 글이 잘 읽히게 더 불투명하게 */
+body.glass[data-theme="light"] { --pop: rgba(255, 255, 255, 0.93); --sheet: rgba(242, 242, 247, 0.96); }
+body.glass[data-theme="dark"] { --pop: rgba(44, 44, 50, 0.94); --sheet: rgba(28, 28, 32, 0.96); }
+body.glass .sheet-head { background: var(--sheet); }

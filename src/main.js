@@ -6,6 +6,7 @@ const { downloadIcs, extractEvents, normalizeUrl } = require('./calendar');
 const icloud = require('./icloud');
 const google = require('./google');
 const memo = require('./memo');
+const maccal = require('./maccal');
 const localSecret = require('./localsecret');
 const os = require('os');
 
@@ -48,6 +49,8 @@ const DEFAULT_CONFIG = {
   showMemo: true,
   memoHeight: 40, // 메모칸 높이(px) — 기본은 한 줄
   memoSync: true, // 아이클라우드가 연결돼 있으면 메모도 아이클라우드에 저장
+  // 맥 캘린더 (맥 전용, 암호 없이): { enabled, calendars:[{id,name,color,writable,source,enabled}] }
+  mac: { enabled: true, calendars: [] },
 };
 
 const dataDir = () => app.getPath('userData');
@@ -238,7 +241,10 @@ function publicConfig() {
     ? { appleId: ic.appleId, calendars: ic.calendars || [], defaultCal: ic.defaultCal || '' }
     : null;
   const gPublic = g ? { email: g.email, calendars: g.calendars || [] } : null;
-  return { ...rest, platform: process.platform, icloud: icPublic, google: gPublic, defaultCal: currentDefaultCal(), isPackaged: app.isPackaged, blurPref: config.blur !== false, blurAvailable: acrylicSupported(), blurActive: useAcrylic };
+  const macPublic = MAC_CAL
+    ? { available: maccal.available(), enabled: !!(config.mac && config.mac.enabled !== false), status: macStatus, calendars: macReady() ? (config.mac.calendars || []) : [] }
+    : null;
+  return { ...rest, mac: macPublic, icloudPaused: !!config.icloud && macReady(), platform: process.platform, icloud: icPublic, google: gPublic, defaultCal: currentDefaultCal(), isPackaged: app.isPackaged, blurPref: config.blur !== false, blurAvailable: acrylicSupported(), blurActive: useAcrylic };
 }
 
 // ---------- 아이클라우드 ----------
@@ -258,6 +264,78 @@ function decryptPw(enc) {
     throw new Error('저장된 암호를 읽지 못했습니다. 설정에서 연동을 다시 해 주세요');
   }
 }
+
+// ---------- 맥 캘린더 (맥 전용, 앱 암호 없이) ----------
+let macStatus = ''; // 'granted' | 'notDetermined' | 'denied' | 'restricted' | 'writeOnly' | ''
+// 시험용: DESKCAL_FAKE_EVENTKIT=가짜 도우미 경로 (맥이 아닌 곳에서 맥 캘린더 흐름 확인)
+if (process.env.DESKCAL_FAKE_EVENTKIT) maccal._setHelperPath(process.env.DESKCAL_FAKE_EVENTKIT);
+const MAC_CAL = IS_MAC || !!process.env.DESKCAL_FAKE_EVENTKIT;
+const macOn = () => MAC_CAL && !!config.mac && config.mac.enabled !== false && maccal.available();
+const macReady = () => macOn() && macStatus === 'granted';
+// 맥 캘린더를 쓰는 동안에는 아이클라우드 직접 연결은 쉼 (같은 일정이 두 번 보이지 않게)
+const icloudActive = () => !!config.icloud && !macReady();
+
+async function refreshMacCals() {
+  const list = await maccal.calendars();
+  const prev = new Map(((config.mac && config.mac.calendars) || []).map((c) => [c.id, c]));
+  config.mac = config.mac || { enabled: true, calendars: [] };
+  config.mac.calendars = list
+    .filter((c) => !c.memo)
+    .map((c) => ({
+      id: c.id, name: c.name, color: c.color, writable: !!c.writable, source: c.source || '',
+      // 맥 캘린더의 '대한민국 공휴일'은 기본 공휴일과 겹치니 처음엔 숨김
+      enabled: prev.has(c.id) ? prev.get(c.id).enabled !== false : !/공휴일|holiday/i.test(c.name),
+    }));
+  writeJson(configPath(), config);
+}
+
+let macStarting = null;
+async function initMac(ask) {
+  if (!macOn()) return;
+  if (macStarting) return macStarting;
+  macStarting = (async () => {
+    try {
+      macStatus = await maccal.status();
+      if (macStatus === 'notDetermined' && ask) macStatus = await maccal.request();
+      if (macStatus === 'granted') await refreshMacCals();
+    } catch (e) {
+      console.error('맥 캘린더', e);
+    }
+    dropSearch();
+    if (win && !win.isDestroyed()) win.webContents.send('config-changed', publicConfig());
+  })().finally(() => { macStarting = null; });
+  return macStarting;
+}
+
+ipcMain.handle('mac:request', async () => {
+  if (!MAC_CAL) return publicConfig();
+  config.mac = { ...(config.mac || { calendars: [] }), enabled: true };
+  writeJson(configPath(), config);
+  macStatus = await maccal.status().catch(() => '');
+  if (macStatus === 'notDetermined') macStatus = await maccal.request();
+  if (macStatus === 'denied' || macStatus === 'restricted' || macStatus === 'writeOnly') {
+    // 한 번 거절하면 맥 설정에서만 바꿀 수 있음
+    shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars');
+  }
+  if (macStatus === 'granted') await refreshMacCals();
+  dropSearch();
+  return applySettings({});
+});
+
+ipcMain.handle('mac:update', async (_e, patch) => {
+  if (!MAC_CAL) return publicConfig();
+  config.mac = config.mac || { enabled: true, calendars: [] };
+  if (patch && typeof patch.enabled === 'boolean') {
+    config.mac.enabled = patch.enabled;
+    if (patch.enabled) await initMac(true);
+  }
+  if (patch && patch.toggle && typeof patch.toggle.id === 'string') {
+    config.mac.calendars = (config.mac.calendars || []).map((c) => (c.id === patch.toggle.id ? { ...c, enabled: !!patch.toggle.enabled } : c));
+  }
+  if (patch && patch.refresh && macReady()) await refreshMacCals();
+  dropSearch();
+  return applySettings({});
+});
 
 let icloudConnecting = null;
 async function ensureIcloud() {
@@ -328,9 +406,20 @@ function rememberColor(uid, color) {
 }
 
 const isGoogle = (s) => typeof s === 'string' && s.startsWith('g:');
+const isMacKey = (s) => typeof s === 'string' && s.startsWith('ek:');
+function macNeeded() {
+  if (!macReady()) throw new Error('맥 캘린더 접근이 허용되지 않았습니다. 설정 → 맥 캘린더에서 허용해 주세요');
+}
 
 ipcMain.handle('event:create', async (_e, { calUrl, event }) => {
   const target = calUrl || currentDefaultCal();
+  if (isMacKey(target)) {
+    macNeeded();
+    const { uid } = await maccal.createEvent(target.slice(3), event);
+    rememberColor(uid, event && event.color); // 맥 캘린더는 일정마다 색을 못 담아서 이 컴퓨터에 기억
+    dropSearch();
+    return true;
+  }
   if (isGoogle(target)) {
     if (!ensureGoogle()) throw new Error('먼저 설정에서 구글 계정으로 로그인해 주세요');
     await google.createEvent(target.slice(2), event); // 구글은 일정 색을 구글 쪽에 저장
@@ -347,6 +436,13 @@ ipcMain.handle('event:create', async (_e, { calUrl, event }) => {
 });
 
 ipcMain.handle('event:update', async (_e, { objUrl, uid, event }) => {
+  if (isMacKey(objUrl)) {
+    macNeeded();
+    await maccal.updateEvent(objUrl.slice(3), event);
+    rememberColor(uid, event && event.color);
+    dropSearch();
+    return true;
+  }
   if (isGoogle(objUrl)) {
     if (!ensureGoogle()) throw new Error('구글에 로그인되어 있지 않습니다');
     await google.updateEvent(objUrl, event);
@@ -363,6 +459,12 @@ ipcMain.handle('event:update', async (_e, { objUrl, uid, event }) => {
 });
 
 ipcMain.handle('event:delete', async (_e, { objUrl, etag }) => {
+  if (isMacKey(objUrl)) {
+    macNeeded();
+    await maccal.deleteEvent(objUrl.slice(3));
+    dropSearch();
+    return true;
+  }
   if (isGoogle(objUrl)) {
     if (!ensureGoogle()) throw new Error('구글에 로그인되어 있지 않습니다');
     await google.deleteEvent(objUrl);
@@ -389,14 +491,21 @@ function ensureGoogle() {
 // 새 일정의 기본 캘린더: 저장된 값이 아직 쓸 수 있는 캘린더인지 확인
 function writableCals() {
   const list = [];
-  if (config.icloud) for (const c of config.icloud.calendars || []) list.push(c.url);
+  if (macReady()) for (const c of config.mac.calendars || []) if (c.writable) list.push(`ek:${c.id}`);
+  if (icloudActive()) for (const c of config.icloud.calendars || []) list.push(c.url);
   if (config.google) for (const c of config.google.calendars || []) if (c.writable) list.push(`g:${c.id}`);
   return list;
 }
 function currentDefaultCal() {
   const list = writableCals();
   if (config.defaultCal && list.includes(config.defaultCal)) return config.defaultCal;
-  if (config.icloud && list.includes(config.icloud.defaultCal)) return config.icloud.defaultCal;
+  if (macReady()) {
+    // 아이클라우드 캘린더를 먼저 (윈도우·아이폰과 함께 보도록)
+    const cals = (config.mac.calendars || []).filter((c) => c.writable);
+    const ic = cals.find((c) => /icloud/i.test(c.source)) || cals[0];
+    if (ic) return `ek:${ic.id}`;
+  }
+  if (icloudActive() && list.includes(config.icloud.defaultCal)) return config.icloud.defaultCal;
   const gp = config.google && (config.google.calendars || []).find((c) => c.primary && c.writable);
   if (gp) return `g:${gp.id}`;
   return list[0] || '';
@@ -516,8 +625,31 @@ async function collectEvents(fromDate, toDate, from, to, force) {
       })
   );
 
+  // 맥 캘린더 (맥 전용, 앱 암호 없이)
+  if (macReady()) {
+    try {
+      const cals = (config.mac.calendars || []).filter((c) => c.enabled !== false);
+      const byId = new Map(cals.map((c) => [c.id, c]));
+      const key = `${from}|${to}`;
+      let hit = macCache.get(key);
+      if (force || !hit || Date.now() - hit.at > 30 * 1000) {
+        hit = { at: Date.now(), events: await maccal.fetchEvents(cals.map((c) => c.id), fromDate, toDate) };
+        macCache.set(key, hit);
+        if (macCache.size > 40) macCache.delete(macCache.keys().next().value);
+      }
+      for (const ev of hit.events) {
+        const cal = byId.get(ev.calKey.slice(3));
+        if (!cal) continue;
+        const own = (config.eventColors || {})[ev.uid] || '';
+        results.push({ ...ev, calId: ev.calKey, calUrl: ev.calKey, calColor: cal.color, color: own || cal.color, ownColor: own, holiday: false });
+      }
+    } catch (err) {
+      errors.push({ name: '맥 캘린더', message: String(err.message || err) });
+    }
+  }
+
   // 아이클라우드 계정으로 연결된 캘린더
-  if (config.icloud) {
+  if (icloudActive()) {
     try {
       if (await ensureIcloud()) {
         const IC_FRESH_MS = 60 * 1000;
@@ -648,13 +780,20 @@ ipcMain.handle('events:search', async (_e, { query, force }) => {
 // 검색창을 열 때 미리 받아 두기
 ipcMain.handle('events:search-warm', async () => { try { await loadSearchPool(false); } catch {} return true; });
 // 일정이 바뀌면 검색용 기억도 지우기
-const dropSearch = () => { searchPool = null; };
+const macCache = new Map(); // 맥 캘린더 일정 잠깐 기억
+const dropSearch = () => { searchPool = null; macCache.clear(); };
 
 // ---------- 월별 메모 ----------
 // 늘 이 PC에 먼저 저장 → 아이클라우드가 연결돼 있으면 아이클라우드에도 저장
 let memos = {}; // '2026-10' → { text, updatedAt, dirty }
 function saveMemos() { writeJson(memosPath(), memos); }
-const memoCloudOn = () => !!(config.icloud && config.memoSync !== false);
+const memoCloudOn = () => !!((macReady() || config.icloud) && config.memoSync !== false);
+// 메모는 맥 캘린더가 허용돼 있으면 그쪽으로, 아니면 아이클라우드 직접 연결로
+const memoCloud = {
+  ready: async () => (macReady() ? true : ensureIcloud()),
+  fetch: (month) => (macReady() ? maccal.fetchMemo(month) : icloud.fetchMemo(month)),
+  save: (month, text, updatedAt) => (macReady() ? maccal.saveMemo(month, text) : icloud.saveMemo(month, text, updatedAt)),
+};
 const memoOut = (month, extra) => {
   const m = memos[month] || { text: '', updatedAt: 0 };
   return { text: m.text || '', updatedAt: m.updatedAt || 0, cloud: memoCloudOn(), synced: !m.dirty, ...extra };
@@ -668,9 +807,9 @@ ipcMain.handle('memo:get', (_e, month) => {
 async function pushMemo(month) {
   const m = memos[month];
   if (!m || !m.dirty || !memoCloudOn()) return;
-  if (!(await ensureIcloud())) return;
+  if (!(await memoCloud.ready())) return;
   const sentAt = m.updatedAt;
-  await icloud.saveMemo(month, m.text, m.updatedAt);
+  await memoCloud.save(month, m.text, m.updatedAt);
   // 보내는 사이에 또 고쳤으면 아직 '보낼 것'으로 남겨 둠
   if (memos[month] && memos[month].updatedAt === sentAt) {
     memos[month].dirty = false;
@@ -683,9 +822,9 @@ ipcMain.handle('memo:sync', async (_e, month) => {
   if (!memo.isMonthKey(month)) throw new Error('달이 올바르지 않습니다');
   if (!memoCloudOn()) return memoOut(month, { synced: false });
   try {
-    if (!(await ensureIcloud())) return memoOut(month, { synced: false, error: '아이클라우드에 연결되어 있지 않습니다' });
+    if (!(await memoCloud.ready())) return memoOut(month, { synced: false, error: '아이클라우드에 연결되어 있지 않습니다' });
     const local = memos[month];
-    const remote = await icloud.fetchMemo(month);
+    const remote = await memoCloud.fetch(month);
     if (local && local.dirty && (!remote || local.updatedAt >= remote.updatedAt)) {
       await pushMemo(month);
     } else if (remote) {
@@ -903,12 +1042,14 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     rebuildTrayMenu = createTray();
     setupUpdater();
+    initMac(true); // 맥: 처음이면 '캘린더 접근 허용' 창을 띄움
     setInterval(flushMemos, 3 * 60 * 1000); // 못 보낸 메모가 있으면 3분마다 다시 시도
     setTimeout(flushMemos, 20 * 1000);
     screen.on('display-removed', () => {
       if (win && !boundsAreVisible(win.getBounds())) win.center();
     });
   });
+  app.on('before-quit', () => maccal.stop());
   // 창을 닫아도 트레이에 남아 있도록 (종료는 트레이 메뉴에서)
   app.on('window-all-closed', () => {});
 }

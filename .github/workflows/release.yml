@@ -76,6 +76,10 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           node -e "const fs=require('fs');const f='src/google-client.json';const j=JSON.parse(fs.readFileSync(f,'utf8'));j.client_secret=process.env.GOOGLE_CLIENT_SECRET||'';if(!j.client_secret){console.error('GOOGLE_CLIENT_SECRET 비밀 값이 없습니다');process.exit(1)}fs.writeFileSync(f,JSON.stringify(j,null,2))"
+      - name: 맥 캘린더 도우미 만들기 (앱 암호 없이 맥 캘린더 쓰기)
+        run: |
+          bash build/mac/build-helper.sh
+          printf '{"id":1,"cmd":"ping"}\n' | build/mac/deskcal-eventkit | grep -q '"ok":true'
       - name: 맥용 만들기 (애플 실리콘·인텔)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'

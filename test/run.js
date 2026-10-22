@@ -173,5 +173,54 @@ function loadIcloudWith(server) {
   });
   fs.rmSync(dir, { recursive: true, force: true });
 
+  console.log('맥에서 만든 메모를 윈도우가 알아봄');
+  await check('제목 \'📝 N월 메모\' + 그달 1일이면 메모로 읽음', () => {
+    const ics = ['BEGIN:VCALENDAR', 'BEGIN:VEVENT', 'UID:ABCD-1234', 'DTSTART;VALUE=DATE:20261101', 'DTEND;VALUE=DATE:20261102',
+      'SUMMARY:📝 11월 메모', 'DESCRIPTION:맥에서 쓴 메모', 'LAST-MODIFIED:20261022T050000Z', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+    const p = memo.parseMemoIcs(ics);
+    assert.strictEqual(p.month, '2026-11');
+    assert.strictEqual(p.text, '맥에서 쓴 메모');
+    assert.strictEqual(p.updatedAt, Date.UTC(2026, 9, 22, 5, 0, 0));
+  });
+  await check('맥에서 고쳐 LAST-MODIFIED가 더 늦으면 그 시각을 씀', () => {
+    const ics = memo.buildMemoIcs('2026-10', '윈도우', 1000).replace(/LAST-MODIFIED:\d+T\d+Z/, 'LAST-MODIFIED:20261022T050000Z');
+    assert.strictEqual(memo.parseMemoIcs(ics).updatedAt, Date.UTC(2026, 9, 22, 5, 0, 0));
+  });
+
+  console.log('맥 캘린더 연결 (가짜 도우미)');
+  const maccal = require('../src/maccal');
+  maccal._setHelperPath(path.join(__dirname, 'fake-eventkit.js'));
+  try {
+    await check('허용 상태와 캘린더 목록', async () => {
+      assert.strictEqual(await maccal.status(), 'granted');
+      const cals = await maccal.calendars();
+      assert.deepStrictEqual(cals.map((c) => c.name), ['집', '대한민국 공휴일']);
+    });
+    await check('일정 추가 → 읽기 → 삭제', async () => {
+      const { uid } = await maccal.createEvent('C1', { title: '세무서 회의', allDay: false, start: '2026-10-27T05:00:00.000Z', end: '2026-10-27T06:00:00.000Z', location: '대구세무서' });
+      assert.ok(uid);
+      const evs = await maccal.fetchEvents(['C1'], new Date('2026-10-01T00:00:00Z'), new Date('2026-10-31T23:59:59Z'));
+      assert.strictEqual(evs.length, 1);
+      assert.strictEqual(evs[0].title, '세무서 회의');
+      assert.strictEqual(evs[0].calKey, 'ek:C1');
+      assert.ok(evs[0].objUrl.startsWith('ek:'));
+      assert.strictEqual(evs[0].editable, true);
+      await maccal.deleteEvent(evs[0].objUrl.slice(3));
+      assert.strictEqual((await maccal.fetchEvents(['C1'], new Date('2026-10-01'), new Date('2026-11-01'))).length, 0);
+    });
+    await check('잘못된 일정은 이유와 함께 거절', async () => {
+      await assert.rejects(maccal.createEvent('C1', { title: '  ', allDay: true, startDay: '2026-10-01' }), /제목/);
+    });
+    await check('월별 메모 저장·읽기·지우기', async () => {
+      assert.strictEqual(await maccal.fetchMemo('2026-10'), null);
+      await maccal.saveMemo('2026-10', '맥에서 쓴 메모');
+      assert.strictEqual((await maccal.fetchMemo('2026-10')).text, '맥에서 쓴 메모');
+      await maccal.saveMemo('2026-10', '');
+      assert.strictEqual(await maccal.fetchMemo('2026-10'), null);
+    });
+  } finally {
+    maccal.stop();
+  }
+
   console.log(`\n${passed}개 통과${process.exitCode ? ' · 실패 있음' : ''}`);
 })();

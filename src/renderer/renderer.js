@@ -263,7 +263,7 @@
     const btn = $('syncBtn');
     btn.classList.toggle('busy', loading);
     btn.classList.toggle('err', !loading && lastErrors.length > 0);
-    if (!config.calendars.length && !config.icloud && !config.google) {
+    if (!config.calendars.length && !hasAccount()) {
       s.textContent = '⚙ 설정에서 캘린더를 연결하세요';
       s.className = 'status';
     } else if (lastErrors.length) {
@@ -314,12 +314,14 @@
   // 일정을 넣을 수 있는 캘린더 전체 (아이클라우드 + 구글)
   function allCals() {
     const list = [];
-    if (config.icloud) for (const c of config.icloud.calendars || []) list.push({ key: c.url, name: c.name, color: c.color, source: '아이클라우드', writable: true });
+    if (config.mac) for (const c of config.mac.calendars || []) list.push({ key: `ek:${c.id}`, name: c.name, color: c.color, source: c.source ? `맥 · ${c.source}` : '맥 캘린더', writable: !!c.writable });
+    if (config.icloud && !config.icloudPaused) for (const c of config.icloud.calendars || []) list.push({ key: c.url, name: c.name, color: c.color, source: '아이클라우드', writable: true });
     if (config.google) for (const c of config.google.calendars || []) list.push({ key: `g:${c.id}`, name: c.name, color: c.color, source: '구글', writable: !!c.writable });
     return list;
   }
   const writableCals = () => allCals().filter((c) => c.writable);
-  const hasAccount = () => !!(config.icloud || config.google);
+  const macGranted = () => !!(config.mac && config.mac.status === 'granted' && config.mac.enabled);
+  const hasAccount = () => !!(config.icloud || config.google || macGranted());
   function calOf(ev) {
     if (!ev || !ev.calUrl) return null;
     return allCals().find((x) => x.key === ev.calUrl) || null;
@@ -348,7 +350,7 @@
     $('popEdit').classList.toggle('hidden', !editable);
     $('popDel').classList.toggle('hidden', !editable);
     $('popFoot').classList.toggle('hidden', !editable && !ev.recurring);
-    $('popNote').textContent = ev.recurring ? '반복 일정은 아이폰에서 수정해 주세요' : '';
+    $('popNote').textContent = ev.recurring ? '반복 일정은 아이폰이나 캘린더 앱에서 수정해 주세요' : '';
     placePopover(anchor);
   }
 
@@ -561,7 +563,7 @@
     const wrap = $('compCals');
     wrap.innerHTML = '';
     const cals = writableCals();
-    const showSource = !!(config.icloud && config.google);
+    const showSource = new Set(cals.map((c) => c.source)).size > 1;
     if (comp.mode === 'edit') {
       const c = calOf(comp.ev);
       const s = document.createElement('span');
@@ -579,7 +581,8 @@
       b.style.setProperty('--c', cal.color);
       b.title = `${cal.name} · ${cal.source}`;
       b.innerHTML = '<span class="dot"></span>';
-      b.appendChild(document.createTextNode(showSource ? `${cal.name} (${cal.source === '구글' ? 'G' : 'iCloud'})` : cal.name));
+      const short = cal.source === '구글' ? 'G' : cal.source === '아이클라우드' ? 'iCloud' : (cal.source.replace(/^맥 · /, '') || '맥');
+      b.appendChild(document.createTextNode(showSource ? `${cal.name} (${short})` : cal.name));
       b.onclick = () => { comp.cal = cal.key; renderCalPick(); renderSwatches(); };
       wrap.appendChild(b);
     }
@@ -799,6 +802,12 @@
     const box = $('icloudBox');
     box.innerHTML = '';
     const ic = config.icloud;
+    const macUsing = macGranted();
+    $('icloudHead').textContent = macUsing ? '아이클라우드 직접 연결 (지금은 필요 없음)' : '아이클라우드';
+    if (macUsing && !ic) {
+      box.innerHTML = '<div class="group"><div class="row sub small" style="line-height:1.6;padding:10px 14px">맥 캘린더로 아이클라우드 일정과 메모를 이미 쓰고 있어서 앱 암호를 넣을 필요가 없어요.</div></div>';
+      return;
+    }
     if (!ic) {
       box.innerHTML = `
         <div class="group">
@@ -844,7 +853,7 @@
     idText.style.fontWeight = '600';
     idText.textContent = ic.appleId;
     const small = document.createElement('small');
-    small.textContent = '연결됨';
+    small.textContent = macUsing ? '쉬는 중 · 맥 캘린더를 쓰는 동안은 쓰지 않아요' : '연결됨';
     name.append(idText, small);
     const out = document.createElement('button');
     out.className = 'link-btn';
@@ -882,6 +891,94 @@
         row.appendChild(def);
       }
       g.appendChild(row);
+    }
+    box.appendChild(g);
+  }
+
+  // ---------- 맥 캘린더 설정 (맥 전용) ----------
+  function renderMac() {
+    const box = $('macBox');
+    const head = $('macHead');
+    box.innerHTML = '';
+    const m = config.mac;
+    const show = !!(m && m.available);
+    box.classList.toggle('hidden', !show);
+    head.classList.toggle('hidden', !show);
+    if (!show) return;
+    const g = document.createElement('div');
+    g.className = 'group';
+    const top = document.createElement('label');
+    top.className = 'row';
+    top.innerHTML = '<span>맥 캘린더 사용<small>앱 암호 없이, 맥에 로그인된 계정의 캘린더를 씁니다</small></span>';
+    const sw = document.createElement('input');
+    sw.type = 'checkbox';
+    sw.className = 'switch';
+    sw.checked = !!m.enabled;
+    sw.onchange = async () => { config = await api.macUpdate({ enabled: sw.checked }); applyConfig(); load(true); loadMemo(); };
+    top.appendChild(sw);
+    g.appendChild(top);
+    if (m.enabled && m.status !== 'granted') {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.style.cssText = 'display:block;padding:12px 14px';
+      const denied = ['denied', 'restricted', 'writeOnly'].includes(m.status);
+      row.innerHTML = denied
+        ? '<div style="font-weight:600;margin-bottom:4px">캘린더 접근이 꺼져 있어요</div><div class="sub small" style="line-height:1.7">아래 버튼을 누르면 맥 설정이 열립니다.<br><b>DeskCal</b>을 켜고(전체 접근) DeskCal을 다시 열어 주세요.</div>'
+        : '<div style="font-weight:600;margin-bottom:4px">캘린더 접근을 허용해 주세요</div><div class="sub small" style="line-height:1.7">아래 버튼을 누르고 뜨는 창에서 <b>허용</b>을 누르면 끝이에요.</div>';
+      g.appendChild(row);
+      const btn = document.createElement('button');
+      btn.className = 'row action';
+      btn.style.cssText = 'color:var(--blue);justify-content:center;font-weight:600';
+      btn.textContent = denied ? '맥 설정 열기' : '캘린더 접근 허용';
+      btn.onclick = async () => {
+        btn.disabled = true;
+        btn.textContent = '기다리는 중…';
+        config = await api.macRequest();
+        applyConfig();
+        load(true);
+        loadMemo();
+      };
+      g.appendChild(btn);
+    }
+    if (m.enabled && m.status === 'granted') {
+      const bySource = new Map();
+      for (const cal of m.calendars || []) {
+        const k = cal.source || '기타';
+        if (!bySource.has(k)) bySource.set(k, []);
+        bySource.get(k).push(cal);
+      }
+      for (const [src, cals] of bySource) {
+        const t = document.createElement('div');
+        t.className = 'row sub small';
+        t.style.minHeight = '28px';
+        t.textContent = src;
+        g.appendChild(t);
+        for (const cal of cals) {
+          const row = document.createElement('label');
+          row.className = 'row';
+          row.style.setProperty('--c', cal.color);
+          const left = document.createElement('span');
+          left.style.cssText = 'flex-direction:row;align-items:center;gap:10px';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.className = 'check-dot';
+          cb.checked = cal.enabled !== false;
+          cb.onchange = async () => { config = await api.macUpdate({ toggle: { id: cal.id, enabled: cb.checked } }); applyConfig(); load(); };
+          left.append(cb, document.createTextNode(cal.name));
+          row.appendChild(left);
+          const tag = document.createElement('small');
+          tag.className = 'sub';
+          tag.textContent = `ek:${cal.id}` === config.defaultCal ? '기본' : cal.writable ? '' : '보기 전용';
+          row.appendChild(tag);
+          g.appendChild(row);
+        }
+      }
+      const re = document.createElement('button');
+      re.className = 'row action';
+      re.style.color = 'var(--blue)';
+      re.textContent = '캘린더 목록 새로고침';
+      re.onclick = async () => { config = await api.macUpdate({ refresh: true }); applyConfig(); load(true); };
+      g.appendChild(re);
     }
     box.appendChild(g);
   }
@@ -989,7 +1086,7 @@
     for (const cal of cals) {
       const o = document.createElement('option');
       o.value = cal.key;
-      o.textContent = config.icloud && config.google ? `${cal.name} (${cal.source})` : cal.name;
+      o.textContent = new Set(cals.map((c) => c.source)).size > 1 ? `${cal.name} (${cal.source})` : cal.name;
       s.appendChild(o);
     }
     s.value = config.defaultCal;
@@ -1060,15 +1157,17 @@
     $('blur').disabled = !config.blurAvailable;
     $('blurHint').textContent = config.blurAvailable ? '바꾸면 프로그램이 다시 시작됩니다' : '윈도우 11에서만 지원';
     $('showMemo').checked = config.showMemo !== false;
-    $('memoSync').checked = config.memoSync !== false && !!config.icloud;
-    $('memoSync').disabled = !config.icloud;
-    $('memoSyncHint').textContent = config.icloud ? '윈도우·맥에서 같은 메모를 봅니다' : '아이클라우드를 연결하면 켤 수 있어요';
+    const cloudOk = !!config.icloud || macGranted();
+    $('memoSync').checked = config.memoSync !== false && cloudOk;
+    $('memoSync').disabled = !cloudOk;
+    $('memoSyncHint').textContent = cloudOk ? '윈도우·맥에서 같은 메모를 봅니다' : '아이클라우드를 연결하면 켤 수 있어요';
     applyMemoLayout();
     applyPlatform();
-    const cloudNow = !!(config.icloud && config.memoSync !== false);
+    const cloudNow = !!((config.icloud || macGranted()) && config.memoSync !== false);
     if (memoCloudSeen !== null && memoCloudSeen !== cloudNow) loadMemo();
     memoCloudSeen = cloudNow;
     renderCalList();
+    renderMac();
     renderIcloud();
     renderGoogle();
     renderDefaultCal();
@@ -1174,7 +1273,7 @@
     if (!st) { el.textContent = ''; return; }
     if (st.pending) { el.textContent = '저장 중…'; return; }
     if (!st.cloud) {
-      el.textContent = config.icloud ? '이 PC에만 저장' : '이 PC에만 저장 · 아이클라우드를 연결하면 다른 기기와 함께 봐요';
+      el.textContent = hasAccount() ? '이 컴퓨터에만 저장' : '이 컴퓨터에만 저장 · 아이클라우드를 연결하면 다른 기기와 함께 봐요';
       return;
     }
     if (st.error) {

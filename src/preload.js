@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('deskcal', {
   memoSync: (month) => ipcRenderer.invoke('memo:sync', month),
   memoSet: (month, text) => ipcRenderer.invoke('memo:set', { month, text }),
   openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
+  macRequest: () => ipcRenderer.invoke('mac:request'),
+  macUpdate: (patch) => ipcRenderer.invoke('mac:update', patch),
   icloudConnect: (appleId, password) => ipcRenderer.invoke('icloud:connect', { appleId, password }),
   icloudDisconnect: () => ipcRenderer.invoke('icloud:disconnect'),
   icloudUpdate: (patch) => ipcRenderer.invoke('icloud:update', patch),

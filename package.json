@@ -1,7 +1,7 @@
 {
   "name": "deskcal",
   "productName": "DeskCal",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "description": "바탕화면 달력 — 윈도우·맥 (아이클라우드·구글 캘린더 연동, 월별 메모, 일정 검색)",
   "main": "src/main.js",
   "private": true,
@@ -86,8 +86,16 @@
       "artifactName": "DeskCal-Mac-${arch}.${ext}",
       "extendInfo": {
         "LSUIElement": true,
-        "NSHumanReadableCopyright": "DeskCal"
-      }
+        "NSHumanReadableCopyright": "DeskCal",
+        "NSCalendarsUsageDescription": "DeskCal이 맥 캘린더의 일정을 바탕화면 달력에 보여 주고, 새 일정과 월별 메모를 저장합니다.",
+        "NSCalendarsFullAccessUsageDescription": "DeskCal이 맥 캘린더의 일정을 바탕화면 달력에 보여 주고, 새 일정과 월별 메모를 저장합니다."
+      },
+      "extraResources": [
+        {
+          "from": "build/mac/deskcal-eventkit",
+          "to": "deskcal-eventkit"
+        }
+      ]
     },
     "dmg": {
       "title": "DeskCal",

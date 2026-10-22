@@ -87,6 +87,8 @@ function parseMemoIcs(data) {
   let text = '';
   let updated = 0;
   let lastMod = 0;
+  let summary = '';
+  let dtstart = '';
   for (const l of lines) {
     const i = l.indexOf(':');
     if (i < 0) continue;
@@ -95,6 +97,8 @@ function parseMemoIcs(data) {
     if (key === 'X-DESKCAL-MEMO') month = val.trim();
     else if (key === 'DESCRIPTION') text = icsUnescape(val);
     else if (key === 'X-DESKCAL-UPDATED') updated = Number(val) || 0;
+    else if (key === 'SUMMARY') summary = icsUnescape(val).trim();
+    else if (key === 'DTSTART') dtstart = val.trim();
     else if (key === 'LAST-MODIFIED') {
       const m = val.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/);
       if (m) lastMod = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
@@ -104,8 +108,15 @@ function parseMemoIcs(data) {
       if (m) month = m[1];
     }
   }
+  // 맥 캘린더(DeskCal 맥)에서 만든 메모: 표시 대신 '📝 N월 메모' 제목 + 그달 1일
+  if (!isMonthKey(month)) {
+    const t = summary.match(/^📝\s*(\d{1,2})월 메모$/);
+    const d = dtstart.match(/^(\d{4})(\d{2})01/);
+    if (t && d && Number(t[1]) === Number(d[2])) month = `${d[1]}-${d[2]}`;
+  }
   if (!isMonthKey(month)) return null;
-  return { month, text, updatedAt: updated || lastMod || 0 };
+  // 다른 기기에서 고치면 LAST-MODIFIED만 바뀔 수 있으니 더 늦은 쪽
+  return { month, text, updatedAt: Math.max(updated, lastMod) };
 }
 
 module.exports = { MEMO_CAL_NAME, MEMO_CAL_SLUG, isMonthKey, monthLabel, memoUid, memoFileName, buildMemoIcs, parseMemoIcs };

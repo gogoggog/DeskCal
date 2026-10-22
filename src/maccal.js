@@ -27,7 +27,11 @@ function available() {
 
 function start() {
   if (child) return;
-  child = spawn(helperPath(), [], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const hp = helperPath();
+  // 시험용 가짜 도우미(.js)는 노드로 실행 (윈도우에서도 돌도록)
+  child = hp.endsWith('.js')
+    ? spawn(process.execPath, [hp], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } })
+    : spawn(hp, [], { stdio: ['pipe', 'pipe', 'pipe'] });
   rl = readline.createInterface({ input: child.stdout });
   rl.on('line', (line) => {
     let msg;
